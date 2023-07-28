@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+
+	"github.com/ISSuh/raft"
 )
 
 const (
@@ -14,61 +16,85 @@ const (
 	Localhost     = "127.0.0.1"
 )
 
-type NodeInfo struct {
-	Id      string `json:"id"`
-	Address string `json:"address"`
-}
-
-func clientRequest(method, path string, node *NodeInfo) (map[string]interface{}, error) {
+func clientRequest(method, path string, node *raft.PeerNodeInfo) []raft.PeerNodeInfo {
 	url := ClusterApiUrl + path
 	log.Println("clientRequest - url : ", url)
 	json, _ := json.Marshal(node)
 	buffer := bytes.NewBuffer(json)
 
+	expectArrayJson := (path == "node")
+
 	client := http.Client{}
 	req, err := http.NewRequest(method, url, buffer)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	return HttpResponseHandler(res)
+	return HttpResponseHandler(res, expectArrayJson)
 }
 
-func HttpResponseHandler(resp *http.Response) (map[string]interface{}, error) {
+func HttpResponseHandler(resp *http.Response, expectArrayJson bool) []raft.PeerNodeInfo {
+	log.Println(resp.StatusCode)
+
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return parseBody(resp)
+		return parseBody(resp, expectArrayJson)
 	default:
-		err := fmt.Errorf("http response error")
-		return nil, err
+		log.Println("http response error")
+		return nil
 	}
 }
 
-func parseBody(response *http.Response) (map[string]interface{}, error) {
-	res := make(map[string]interface{})
-	if err := json.NewDecoder(response.Body).Decode(&res); err != nil {
-		return nil, err
+func parseBody(resp *http.Response, expectArrayJson bool) []raft.PeerNodeInfo {
+	var res []raft.PeerNodeInfo
+	if expectArrayJson {
+		decoder := json.NewDecoder(resp.Body)
+		err := decoder.Decode(&res)
+		if err != nil {
+			return nil
+		}
+	} else {
+		var item raft.PeerNodeInfo
+		decoder := json.NewDecoder(resp.Body)
+		err := decoder.Decode(&item)
+		if err != nil {
+			return nil
+		}
+		res = append(res, item)
 	}
-	return res, nil
+	return res
 }
 
 func main() {
 	log.Println("RAFT ")
 	args := os.Args[1:]
-	id := args[0]
+	if len(args) < 2 {
+		log.Println("invalid number of arguments")
+		return
+	}
+
+	idStr := args[0]
+	var id int
+	var err error
+	if id, err = strconv.Atoi(idStr); err != nil {
+		log.Println("invalid id argument")
+		return
+	}
+
 	port := args[1]
 	address := Localhost + ":" + port
 
-	test, _ := clientRequest(http.MethodGet, "node", nil)
-	log.Println(test)
+	nodeList := clientRequest(http.MethodGet, "node", nil)
+	log.Println("peers : ", nodeList)
 
-	node := NodeInfo{Id: id, Address: address}
-	test, _ = clientRequest(http.MethodPost, "node/"+id, &node)
-	log.Println(test)
+	node := raft.PeerNodeInfo{Id: id, Address: address}
+	clientRequest(http.MethodPost, "node/"+idStr, &node)
+	service := raft.NewRaftService(id)
+	service.Run(address, nodeList)
 
-	test, _ = clientRequest(http.MethodGet, "node", nil)
-	log.Println(test)
+	service.Stop()
+	clientRequest(http.MethodDelete, "node/"+idStr, nil)
 }

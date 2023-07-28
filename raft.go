@@ -6,26 +6,35 @@ type RaftService struct {
 	running bool
 
 	network *NetworkService
+
+	testBlock chan bool
 }
 
 func NewRaftService(id int) *RaftService {
 	node := NewRafeNode()
 	service := &RaftService{
-		id:      id,
-		node:    node,
-		network: NewNetworkService(node),
+		id:        id,
+		node:      node,
+		network:   NewNetworkService(id, node),
+		testBlock: make(chan bool),
 	}
 	return service
 }
 
-func (service *RaftService) Run(port string, peers []PeerInfo) {
+func (service *RaftService) Run(address string, peers []PeerNodeInfo) {
 	service.running = true
-	service.network.Serve(port)
+	service.network.Serve(address, peers)
 
+	for _, peer := range peers {
+		service.network.ConnectToPeer(peer)
+	}
+
+	<-service.testBlock
 }
 
 func (service *RaftService) Stop() {
 	service.running = false
+
 }
 
 func (service *RaftService) IsRunning() bool {

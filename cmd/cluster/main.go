@@ -4,28 +4,29 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
 
 type NodeInfo struct {
-	Id      string `json:"id"`
+	Id      int    `json:"id"`
 	Address string `json:"address"`
 }
 
 type NodeManager struct {
 	idCounter int
-	nodes     map[string]*NodeInfo
+	nodes     map[int]*NodeInfo
 }
 
 func NewNodeManager() *NodeManager {
 	return &NodeManager{
 		idCounter: 0,
-		nodes:     make(map[string]*NodeInfo),
+		nodes:     make(map[int]*NodeInfo),
 	}
 }
 
-func (manager *NodeManager) addNewNode(id string, newNode *NodeInfo) bool {
+func (manager *NodeManager) addNewNode(id int, newNode *NodeInfo) bool {
 	if _, ok := manager.nodes[id]; ok {
 		log.Println("Already exist node. ", id, " / ", newNode.Address)
 		return false
@@ -35,13 +36,13 @@ func (manager *NodeManager) addNewNode(id string, newNode *NodeInfo) bool {
 	return true
 }
 
-func (manager *NodeManager) removeNode(id string) {
+func (manager *NodeManager) removeNode(id int) {
 	if _, ok := manager.nodes[id]; ok {
 		delete(manager.nodes, id)
 	}
 }
 
-func (manager *NodeManager) node(id string) *NodeInfo {
+func (manager *NodeManager) node(id int) *NodeInfo {
 	if _, ok := manager.nodes[id]; !ok {
 		log.Println("node - not exist node. ", id)
 		return nil
@@ -69,13 +70,19 @@ func NewClusterHandler() *ClusterHandler {
 
 func (handler *ClusterHandler) NewNode(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id := params["id"]
+	path := params["id"]
+	var id int
+	var err error
+	if id, err = strconv.Atoi(path); err != nil {
+		response(w, "Bad Request. invalid path", http.StatusBadRequest)
+		return
+	}
 
 	log.Println("NewNode - id : ", id)
 
 	var node NodeInfo
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&node)
+	err = decoder.Decode(&node)
 	if err != nil {
 		log.Println("NewNode - invalid message,. ", r.Body)
 		response(w, "Bad Request. invalid message", http.StatusBadRequest)
@@ -90,7 +97,13 @@ func (handler *ClusterHandler) NewNode(w http.ResponseWriter, r *http.Request) {
 
 func (handler *ClusterHandler) RemoveNode(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id := params["id"]
+	path := params["id"]
+	var id int
+	var err error
+	if id, err = strconv.Atoi(path); err != nil {
+		response(w, "Bad Request. invalid path", http.StatusBadRequest)
+		return
+	}
 
 	log.Println("RemoveNode - id : ", id)
 
@@ -100,7 +113,13 @@ func (handler *ClusterHandler) RemoveNode(w http.ResponseWriter, r *http.Request
 
 func (handler *ClusterHandler) Node(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	id := params["id"]
+	path := params["id"]
+	var id int
+	var err error
+	if id, err = strconv.Atoi(path); err != nil {
+		response(w, "Bad Request. invalid path", http.StatusBadRequest)
+		return
+	}
 
 	log.Println("Node - id : ", id)
 	node := handler.manager.node(id)
