@@ -54,6 +54,11 @@ func (rpp *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesR
 	return nil
 }
 
+type PeerInfo struct {
+	id   int
+	port string
+}
+
 type NetworkService struct {
 	serverId int
 

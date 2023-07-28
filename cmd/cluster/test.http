@@ -1,0 +1,32 @@
+
+### get node list
+
+GET http://127.0.0.1:33660/node HTTP/1.1
+
+### get specific node
+
+GET http://127.0.0.1:33660/node/1 HTTP/1.1
+
+### add node 1
+
+POST http://127.0.0.1:33660/node/1 HTTP/1.1
+Content-Type: application/json
+
+{
+  "id": "1",
+  "address": "127.0.0.1:33665"
+}
+
+### add node 2
+
+POST http://127.0.0.1:33660/node/2 HTTP/1.1
+Content-Type: application/json
+
+{
+  "id": "2",
+  "address": "127.0.0.1:33666"
+}
+
+### delete specific node
+
+DELETE  http://127.0.0.1:33660/node/1 HTTP/1.1

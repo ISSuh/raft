@@ -1,22 +1,27 @@
 package raft
 
 type RaftService struct {
-	node     *RaftNode
-	peerNode map[int]*RaftPeerNode
-	running  bool
+	id      int
+	node    *RaftNode
+	running bool
 
 	network *NetworkService
 }
 
-func NewRaftService() *RaftService {
+func NewRaftService(id int) *RaftService {
+	node := NewRafeNode()
 	service := &RaftService{
-		node:     NewRafeNode(),
-		peerNode: make(map[int]*RaftPeerNode, 0),
+		id:      id,
+		node:    node,
+		network: NewNetworkService(node),
 	}
+	return service
 }
 
-func (service *RaftService) Serve() {
+func (service *RaftService) Run(port string, peers []PeerInfo) {
 	service.running = true
+	service.network.Serve(port)
+
 }
 
 func (service *RaftService) Stop() {

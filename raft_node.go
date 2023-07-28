@@ -1,8 +1,5 @@
 package raft
 
-type RaftPeerNode struct {
-}
-
 type RaftNode struct {
 	NodeState
 }
