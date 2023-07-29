@@ -1,5 +1,10 @@
 package raft
 
+import (
+	nested "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/sirupsen/logrus"
+)
+
 type RaftService struct {
 	id      int
 	node    *RaftNode
@@ -8,10 +13,18 @@ type RaftService struct {
 	network *NetworkService
 
 	testBlock chan bool
+
+	logger *logrus.Logger
 }
 
 func NewRaftService(id int) *RaftService {
-	node := NewRafeNode()
+	logrus.SetFormatter(&nested.Formatter{
+		HideKeys:        true,
+		FieldsOrder:     []string{"network", "node", "peernode"},
+		TimestampFormat: "[2006:01:02 15:04:05.000]",
+	})
+
+	node := NewRafeNode(id)
 	service := &RaftService{
 		id:        id,
 		node:      node,
@@ -29,6 +42,9 @@ func (service *RaftService) Run(address string, peers []PeerNodeInfo) {
 		service.network.ConnectToPeer(peer)
 	}
 
+	service.node.Run()
+
+	// for test
 	<-service.testBlock
 }
 
