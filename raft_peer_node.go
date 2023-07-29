@@ -12,6 +12,12 @@ type RaftPeerNode struct {
 	client  *rpc.Client
 }
 
+func (peer *RaftPeerNode) RegistPeerNode(args interface{}, reply interface{}) error {
+	log.WithField("peer", "RaftPeerNode.RegistPeerNode").Info(goidForlog())
+	method := "Raft.RegistPeerNode"
+	return peer.client.Call(method, args, reply)
+}
+
 func (peer *RaftPeerNode) RequestVote(args interface{}, reply interface{}) error {
 	log.WithField("peer", "RaftPeerNode.RequestVote").Info(goidForlog())
 	method := "Raft.RequestVote"

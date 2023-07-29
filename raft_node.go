@@ -24,17 +24,27 @@ type RaftNode struct {
 	timeoutDuration time.Duration
 	stopped         chan bool
 
+	requestVoteSignal      chan RequestVoteArgs
+	requestVoteReplySignal chan RequestVoteReply
+
+	appendEntriesSignal      chan AppendEntriesArgs
+	appendEntriesReplySignal chan AppendEntriesReply
+
 	peerMutex sync.Mutex
 	workGroup sync.WaitGroup
 }
 
 func NewRafeNode(id int) *RaftNode {
 	return &RaftNode{
-		NodeState:       NewNodeState(),
-		id:              id,
-		peers:           make(map[int]*RaftPeerNode),
-		timeoutDuration: DefaultElectionMinTimeout,
-		stopped:         make(chan bool),
+		NodeState:                NewNodeState(),
+		id:                       id,
+		peers:                    make(map[int]*RaftPeerNode),
+		timeoutDuration:          DefaultElectionMinTimeout,
+		stopped:                  make(chan bool),
+		requestVoteSignal:        make(chan RequestVoteArgs, 512),
+		requestVoteReplySignal:   make(chan RequestVoteReply, 512),
+		appendEntriesSignal:      make(chan AppendEntriesArgs, 512),
+		appendEntriesReplySignal: make(chan AppendEntriesReply, 512),
 	}
 }
 
@@ -73,9 +83,10 @@ func (node *RaftNode) loop() {
 }
 
 func (node *RaftNode) follwerWork() {
-	timeout := timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
 
 	for node.currentState() == FOLLOWER {
+		timeout := timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+
 		select {
 		case <-node.stopped:
 			node.setState(STOP)
@@ -84,6 +95,36 @@ func (node *RaftNode) follwerWork() {
 			log.WithField("node", "node.follwerWork").Info(goidForlog() + "to be candidate")
 			node.setState(CANDIDATE)
 			return
+		case request := <-node.requestVoteSignal:
+			log.WithField("node", "node.follwerWork").Info(goidForlog() + " on Requse vote")
+
+			respone := RequestVoteReply{Term: 0, VoteGranted: false}
+			if request.Term > node.currentTerm() {
+				node.setTerm(request.Term)
+
+				respone.Term = node.currentTerm()
+				respone.VoteGranted = true
+			} else {
+				respone.Term = node.currentTerm()
+				respone.VoteGranted = false
+			}
+
+			node.requestVoteReplySignal <- respone
+		case request := <-node.appendEntriesSignal:
+			log.WithField("node", "node.follwerWork").Info(goidForlog() + "on appendEntry")
+
+			respone := AppendEntriesReply{Term: 0, Success: false}
+			if request.Term > node.currentTerm() {
+				node.setTerm(request.Term)
+
+				respone.Term = node.currentTerm()
+				respone.Success = true
+			} else {
+				respone.Term = node.currentTerm()
+				respone.Success = false
+			}
+
+			node.appendEntriesReplySignal <- respone
 		}
 	}
 }
@@ -102,7 +143,6 @@ func (node *RaftNode) candidateWork() {
 			responses = make(chan *RequestVoteReply, len(node.peers))
 			arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.id}
 			for _, peer := range node.peers {
-
 				node.workGroup.Add(1)
 				go func(peer *RaftPeerNode, arg RequestVoteArgs) {
 					defer node.workGroup.Done()
@@ -111,6 +151,7 @@ func (node *RaftNode) candidateWork() {
 					err := peer.RequestVote(arg, &reply)
 					if err != nil {
 						log.WithField("node", "node.candidateWork").Error(goidForlog()+"err : ", err)
+						node.removePeer(peer.id)
 						return
 					}
 
@@ -131,8 +172,6 @@ func (node *RaftNode) candidateWork() {
 			return
 		}
 
-		log.WithField("node", "node.candidateWork").Error(goidForlog() + "select!!!!")
-
 		select {
 		case <-node.stopped:
 			node.setState(STOP)
@@ -141,6 +180,7 @@ func (node *RaftNode) candidateWork() {
 			log.WithField("node", "node.candidateWork").Info(goidForlog() + "timeout. retry request vote")
 			doErction = true
 			electionGrantedCount = 0
+			node.setTerm(node.currentTerm() - 1)
 		case res := <-responses:
 			if res.VoteGranted && res.Term == node.currentTerm() {
 				electionGrantedCount++
@@ -162,7 +202,6 @@ func (node *RaftNode) leaderWork() {
 			// responses = make(chan *AppendEntriesReply, len(node.peers))
 			arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.id}
 			for _, peer := range node.peers {
-
 				node.workGroup.Add(1)
 				go func(peer *RaftPeerNode, arg RequestVoteArgs) {
 					defer node.workGroup.Done()
@@ -171,6 +210,7 @@ func (node *RaftNode) leaderWork() {
 					err := peer.AppendEntries(arg, &reply)
 					if err != nil {
 						log.WithField("node", "node.leaderWork").Error(goidForlog()+"err : ", err)
+						node.removePeer(peer.id)
 						return
 					}
 
@@ -187,4 +227,39 @@ func (node *RaftNode) addPeer(id int, peerNode *RaftPeerNode) {
 	node.peerMutex.Lock()
 	defer node.peerMutex.Unlock()
 	node.peers[id] = peerNode
+}
+
+func (node *RaftNode) removePeer(id int) {
+	node.peerMutex.Lock()
+	defer node.peerMutex.Unlock()
+	if peer := node.peers[id]; peer != nil {
+		delete(node.peers, id)
+	}
+}
+
+func (node *RaftNode) getPeer(id int) *RaftPeerNode {
+	node.peerMutex.Lock()
+	defer node.peerMutex.Unlock()
+	if peer := node.peers[id]; peer != nil {
+		return peer
+	}
+	return nil
+}
+
+func (node *RaftNode) onRequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
+	node.peerMutex.Lock()
+	defer node.peerMutex.Unlock()
+	node.requestVoteSignal <- args
+
+	response := <-node.requestVoteReplySignal
+	*reply = response
+}
+
+func (node *RaftNode) onAppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) {
+	node.peerMutex.Lock()
+	defer node.peerMutex.Unlock()
+	node.appendEntriesSignal <- args
+
+	response := <-node.appendEntriesReplySignal
+	*reply = response
 }

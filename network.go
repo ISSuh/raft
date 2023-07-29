@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -68,14 +67,13 @@ func (proxy *RPCProxy) RegistPeerNode(args PeerNodeInfo, reply *RegistPeerNodeRe
 
 func (proxy *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) error {
 	log.WithField("network", "network.RequestVote").Info(goidForlog())
-
-	// return rpp.cm.RequestVote(args, reply)
+	proxy.node.onRequestVote(args, reply)
 	return nil
 }
 
 func (proxy *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
 	log.WithField("network", "network.AppendEntries").Info(goidForlog())
-	// return rpp.cm.AppendEntries(args, reply)
+	proxy.node.onAppendEntries(args, reply)
 	return nil
 }
 
@@ -83,24 +81,21 @@ type NetworkService struct {
 	id      int
 	address string
 
-	node        *RaftNode
-	rpcServer   *rpc.Server
-	listener    net.Listener
-	rpcProxy    *RPCProxy
-	peerClients map[int]*rpc.Client
+	node      *RaftNode
+	rpcServer *rpc.Server
+	listener  net.Listener
+	rpcProxy  *RPCProxy
 
 	mutex sync.Mutex
 	wg    sync.WaitGroup
 
-	ready <-chan interface{}
-	quit  chan interface{}
+	quit chan interface{}
 }
 
 func NewNetworkService(id int, node *RaftNode) *NetworkService {
 	return &NetworkService{
-		id:          id,
-		node:        node,
-		peerClients: make(map[int]*rpc.Client),
+		id:   id,
+		node: node,
 	}
 }
 
@@ -152,20 +147,21 @@ func (service *NetworkService) GetListenAddr() net.Addr {
 	return service.listener.Addr()
 }
 
-func (service *NetworkService) ConnectToPeer(peer PeerNodeInfo) error {
-	log.WithField("network", "network.ConnectToPeer").Info(goidForlog()+"peer : ", peer)
-	peerId := peer.Id
-	addr, err := net.ResolveTCPAddr("tcp", peer.Address)
+func (service *NetworkService) ConnectToPeer(peerInfo PeerNodeInfo) error {
+	log.WithField("network", "network.ConnectToPeer").Info(goidForlog()+"peer : ", peerInfo)
+	peerId := peerInfo.Id
+	addr, err := net.ResolveTCPAddr("tcp", peerInfo.Address)
 	if err != nil {
 		log.WithField("network", "network.ConnectToPeer").Error(goidForlog()+"err : ", err)
 		return err
 	}
 
-	if service.peerClients[peerId] != nil {
-		log.WithField("network", "network.ConnectToPeer").Warn(goidForlog()+"alread registed. ", peer.Id)
+	if peer := service.node.getPeer(peerId); peer != nil {
+		log.WithField("network", "network.ConnectToPeer").Warn(goidForlog()+"alread registed. ", peerId)
 		return nil
 	}
 
+	// connect rpc server
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
 	client, err := rpc.Dial(addr.Network(), addr.String())
@@ -173,7 +169,15 @@ func (service *NetworkService) ConnectToPeer(peer PeerNodeInfo) error {
 		log.WithField("network", "network.ConnectToPeer").Error(goidForlog()+"err : ", err)
 		return err
 	}
-	service.peerClients[peerId] = client
+
+	// regist5 peer
+	peerNode := &RaftPeerNode{
+		id:      peerInfo.Id,
+		address: peerInfo.Address,
+		client:  client,
+	}
+
+	service.node.addPeer(peerInfo.Id, peerNode)
 
 	myInfo := PeerNodeInfo{
 		Id:      service.id,
@@ -182,31 +186,12 @@ func (service *NetworkService) ConnectToPeer(peer PeerNodeInfo) error {
 
 	// notify peer for regist me
 	var reply RegistPeerNodeReply
-	err = client.Call("Raft.RegistPeerNode", myInfo, &reply)
+	err = peerNode.RegistPeerNode(myInfo, &reply)
 	if err != nil {
 		log.WithField("network", "network.ConnectToPeer").Error(goidForlog()+"err : ", err)
 		return err
 	}
 
-	// regist5 peer
-	service.node.addPeer(peer.Id, &RaftPeerNode{
-		id:      peer.Id,
-		address: peer.Address,
-		client:  client,
-	})
-
 	log.WithField("network", "network.ConnectToPeer").Info(goidForlog()+"result : ", reply.Regist)
 	return nil
-}
-
-func (service *NetworkService) Call(id int, serviceMethod string, args interface{}, reply interface{}) error {
-	service.mutex.Lock()
-	peer := service.peerClients[id]
-	service.mutex.Unlock()
-
-	if peer == nil {
-		return fmt.Errorf("call client %d after it's closed", id)
-	} else {
-		return peer.Call(serviceMethod, args, reply)
-	}
 }
