@@ -24,6 +24,11 @@ type RaftNode struct {
 	timeoutDuration time.Duration
 	stopped         chan bool
 
+	logs        []LogEntry
+	commitIndex int64
+	nextIndex   map[int]int64
+	matchIndex  map[int]int64
+
 	requestVoteSignal      chan RequestVoteArgs
 	requestVoteReplySignal chan RequestVoteReply
 
@@ -31,16 +36,24 @@ type RaftNode struct {
 	appendEntriesReplySignal chan AppendEntriesReply
 
 	peerMutex sync.Mutex
+	logMutex  sync.Mutex
 	workGroup sync.WaitGroup
 }
 
 func NewRafeNode(id int) *RaftNode {
 	return &RaftNode{
-		NodeState:                NewNodeState(),
-		id:                       id,
-		peers:                    make(map[int]*RaftPeerNode),
-		timeoutDuration:          DefaultElectionMinTimeout,
-		stopped:                  make(chan bool),
+		NodeState: NewNodeState(),
+		id:        id,
+
+		peers:           make(map[int]*RaftPeerNode),
+		timeoutDuration: DefaultElectionMinTimeout,
+		stopped:         make(chan bool),
+
+		logs:        make([]LogEntry, 0),
+		commitIndex: -1,
+		nextIndex:   make(map[int]int64),
+		matchIndex:  make(map[int]int64),
+
 		requestVoteSignal:        make(chan RequestVoteArgs, 512),
 		requestVoteReplySignal:   make(chan RequestVoteReply, 512),
 		appendEntriesSignal:      make(chan AppendEntriesArgs, 512),
@@ -146,6 +159,9 @@ func (node *RaftNode) candidateWork() {
 				node.workGroup.Add(1)
 				go func(peer *RaftPeerNode, arg RequestVoteArgs) {
 					defer node.workGroup.Done()
+					if node.currentState() != CANDIDATE {
+						return
+					}
 
 					var reply RequestVoteReply
 					err := peer.RequestVote(arg, &reply)
@@ -182,6 +198,11 @@ func (node *RaftNode) candidateWork() {
 			electionGrantedCount = 0
 			node.setTerm(node.currentTerm() - 1)
 		case res := <-responses:
+			if res.Term > node.currentTerm() {
+				node.setState(FOLLOWER)
+				return
+			}
+
 			if res.VoteGranted && res.Term == node.currentTerm() {
 				electionGrantedCount++
 			}
@@ -190,6 +211,7 @@ func (node *RaftNode) candidateWork() {
 }
 
 func (node *RaftNode) leaderWork() {
+	log.WithField("node", "node.leaderWork").Info(goidForlog()+"current term : ", node.currentTerm())
 	timeout := timer(DefaultHeartBeatMinTimeout, DefaultHeartBeatMaxTimeout)
 	// var responses chan *AppendEntriesReply
 
@@ -197,6 +219,7 @@ func (node *RaftNode) leaderWork() {
 		select {
 		case <-node.stopped:
 			node.setState(STOP)
+			return
 		case <-timeout:
 			log.WithField("node", "node.leaderWork").Info(goidForlog() + "heatbeat")
 			// responses = make(chan *AppendEntriesReply, len(node.peers))
@@ -262,4 +285,16 @@ func (node *RaftNode) onAppendEntries(args AppendEntriesArgs, reply *AppendEntri
 
 	response := <-node.appendEntriesReplySignal
 	*reply = response
+}
+
+func (node *RaftNode) Append(command []byte) bool {
+	node.logMutex.Lock()
+	defer node.logMutex.Unlock()
+
+	if node.currentState() != LEADER {
+		return false
+	}
+
+	node.logs = append(node.logs, LogEntry{Term: node.currentTerm(), Command: command})
+	return true
 }

@@ -8,6 +8,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type OnRequestVote = func(int) int
+
+type NetworkHandler interface {
+	OnRequestVote()
+	OnAppendEntries()
+}
+
+type Network interface {
+	RegistHandler(handler *NetworkHandler)
+
+	RegistPeerNode(arg *PeerNodeInfo, resp *RegistPeerNodeReply)
+	RequestVote(arg *RequestVoteArgs, resp *RequestVoteReply)
+	AppendEntries(arg *AppendEntriesArgs, resp *AppendEntriesReply)
+}
+
+type LogEntry struct {
+	Term    uint64
+	Command []byte
+}
+
 type PeerNodeInfo struct {
 	Id      int    `json:"id"`
 	Address string `json:"address"`

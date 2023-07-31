@@ -13,8 +13,6 @@ type RaftService struct {
 	network *NetworkService
 
 	testBlock chan bool
-
-	logger *logrus.Logger
 }
 
 func NewRaftService(id int) *RaftService {

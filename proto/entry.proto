@@ -15,5 +15,5 @@ option (gogoproto.goproto_sizecache_all) = false;
 message Entry {
   uint64 term = 1;
   uint64 index = 2;
-	bytes Data  = 3;
+	bytes log  = 3;
 }
