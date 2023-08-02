@@ -71,10 +71,10 @@ type AppendEntriesReply struct {
 	Term    uint64
 	Success bool
 
-	// Faster conflict resolution optimization (described near the end of section
-	// 5.3 in the paper.)
-	// ConflictIndex int
-	// ConflictTerm  int
+	PeerId int
+
+	ConflictIndex int64
+	ConflictTerm  uint64
 }
 
 type RPCProxy struct {
