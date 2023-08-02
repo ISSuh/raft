@@ -28,6 +28,14 @@ type LogEntry struct {
 	Command []byte
 }
 
+type ApplyEntry struct {
+	Command []byte
+}
+
+type ApplyEntryReply struct {
+	Success bool
+}
+
 type PeerNodeInfo struct {
 	Id      int    `json:"id"`
 	Address string `json:"address"`
@@ -53,10 +61,10 @@ type AppendEntriesArgs struct {
 	Term     uint64
 	LeaderId int
 
-	// PrevLogIndex int
-	// PrevLogTerm  int
-	// Entries      []LogEntry
-	// LeaderCommit int
+	PrevLogIndex      int64
+	PrevLogTerm       uint64
+	Entries           []LogEntry
+	LeaderCommitIndex int64
 }
 
 type AppendEntriesReply struct {
@@ -94,6 +102,12 @@ func (proxy *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply
 func (proxy *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
 	log.WithField("network", "network.AppendEntries").Info(goidForlog())
 	proxy.node.onAppendEntries(args, reply)
+	return nil
+}
+
+func (proxy *RPCProxy) ApplyEntry(args ApplyEntry, reply *ApplyEntryReply) error {
+	log.WithField("network", "network.ApplyEntry").Info(goidForlog())
+	reply.Success = proxy.node.ApplyEntry(args.Command)
 	return nil
 }
 

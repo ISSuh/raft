@@ -123,21 +123,8 @@ func (node *RaftNode) follwerWork() {
 			}
 
 			node.requestVoteReplySignal <- respone
-		case request := <-node.appendEntriesSignal:
-			log.WithField("node", "node.follwerWork").Info(goidForlog() + "on appendEntry")
-
-			respone := AppendEntriesReply{Term: 0, Success: false}
-			if request.Term > node.currentTerm() {
-				node.setTerm(request.Term)
-
-				respone.Term = node.currentTerm()
-				respone.Success = true
-			} else {
-				respone.Term = node.currentTerm()
-				respone.Success = false
-			}
-
-			node.appendEntriesReplySignal <- respone
+		case arg := <-node.appendEntriesSignal:
+			node.handleOnAppendEntries(arg)
 		}
 	}
 }
@@ -212,22 +199,37 @@ func (node *RaftNode) candidateWork() {
 
 func (node *RaftNode) leaderWork() {
 	log.WithField("node", "node.leaderWork").Info(goidForlog()+"current term : ", node.currentTerm())
-	timeout := timer(DefaultHeartBeatMinTimeout, DefaultHeartBeatMaxTimeout)
-	// var responses chan *AppendEntriesReply
+	var timeout <-chan time.Time
+	var responses chan *AppendEntriesReply
+	doHeartBeat := true
+	appendSuccesCount := 0
 
 	for node.currentState() == LEADER {
-		select {
-		case <-node.stopped:
-			node.setState(STOP)
-			return
-		case <-timeout:
+		if doHeartBeat {
 			log.WithField("node", "node.leaderWork").Info(goidForlog() + "heatbeat")
-			// responses = make(chan *AppendEntriesReply, len(node.peers))
-			arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.id}
+			responses = make(chan *AppendEntriesReply, len(node.peers))
+
+			arg := AppendEntriesArgs{
+				Term:              node.currentTerm(),
+				LeaderId:          node.id,
+				PrevLogIndex:      -1,
+				PrevLogTerm:       0,
+				Entries:           make([]LogEntry, 0),
+				LeaderCommitIndex: node.commitIndex,
+			}
+
 			for _, peer := range node.peers {
 				node.workGroup.Add(1)
-				go func(peer *RaftPeerNode, arg RequestVoteArgs) {
+				go func(peer *RaftPeerNode, arg AppendEntriesArgs) {
 					defer node.workGroup.Done()
+
+					nextIndex := node.nextIndex[peer.id]
+					arg.PrevLogIndex = nextIndex - 1
+					if arg.PrevLogIndex >= 0 {
+						arg.PrevLogTerm = node.logs[arg.PrevLogIndex].Term
+					}
+
+					arg.Entries = append(arg.Entries, node.logs[nextIndex:]...)
 
 					var reply AppendEntriesReply
 					err := peer.AppendEntries(arg, &reply)
@@ -237,11 +239,36 @@ func (node *RaftNode) leaderWork() {
 						return
 					}
 
-					// responses <- &reply
+					responses <- &reply
 				}(peer, arg)
 			}
 
+			doHeartBeat = false
 			timeout = timer(DefaultHeartBeatMinTimeout, DefaultHeartBeatMaxTimeout)
+		}
+
+		majorityCount := (len(node.peers) / 2) + 1
+		if appendSuccesCount == majorityCount {
+			node.commitIndex = int64(len(node.logs) - 1)
+			log.WithField("node", "node.leaderWork").Info(goidForlog()+" commit!!. index : ", node.commitIndex)
+			return
+		}
+
+		select {
+		case <-node.stopped:
+			node.setState(STOP)
+			return
+		case <-timeout:
+			doHeartBeat = true
+		case res := <-responses:
+			if res.Term > node.currentTerm() {
+				node.setState(FOLLOWER)
+				return
+			}
+
+			if res.Success && res.Term == node.currentTerm() {
+				appendSuccesCount++
+			}
 		}
 	}
 }
@@ -287,7 +314,20 @@ func (node *RaftNode) onAppendEntries(args AppendEntriesArgs, reply *AppendEntri
 	*reply = response
 }
 
-func (node *RaftNode) Append(command []byte) bool {
+func (node *RaftNode) handleOnAppendEntries(arg AppendEntriesArgs) {
+	log.WithField("node", "node.follwerWork").Info(goidForlog()+"on appendEntry. ", arg)
+
+	if arg.Term < node.currentTerm() {
+		node.appendEntriesReplySignal <- AppendEntriesReply{Term: node.currentTerm(), Success: false}
+		return
+	}
+
+	node.setTerm(arg.Term)
+	respone := AppendEntriesReply{Term: node.currentTerm(), Success: true}
+	node.appendEntriesReplySignal <- respone
+}
+
+func (node *RaftNode) ApplyEntry(command []byte) bool {
 	node.logMutex.Lock()
 	defer node.logMutex.Unlock()
 
