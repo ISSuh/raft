@@ -25,7 +25,7 @@ func (peer *RaftPeerNode) RequestVote(args interface{}, reply interface{}) error
 }
 
 func (peer *RaftPeerNode) AppendEntries(args interface{}, reply interface{}) error {
-	log.WithField("peer", "RaftPeerNode.AppendEntries").Info(goidForlog())
+	// log.WithField("peer", "RaftPeerNode.AppendEntries").Info(goidForlog())
 	method := "Raft.AppendEntries"
 	return peer.client.Call(method, args, reply)
 }

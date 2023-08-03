@@ -100,7 +100,7 @@ func (proxy *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply
 }
 
 func (proxy *RPCProxy) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) error {
-	log.WithField("network", "network.AppendEntries").Info(goidForlog())
+	// log.WithField("network", "network.AppendEntries").Info(goidForlog())
 	proxy.node.onAppendEntries(args, reply)
 	return nil
 }

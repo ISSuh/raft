@@ -15,6 +15,10 @@ const (
 	DefaultHeartBeatMaxTimeout = 150 * time.Millisecond
 )
 
+type AppendEntriesResult struct {
+	sendEntryLen int
+	reply        *AppendEntriesReply
+}
 type RaftNode struct {
 	*NodeState
 
@@ -98,7 +102,6 @@ func (node *RaftNode) loop() {
 }
 
 func (node *RaftNode) follwerWork() {
-
 	for node.currentState() == FOLLOWER {
 		timeout := timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
 
@@ -119,42 +122,20 @@ func (node *RaftNode) follwerWork() {
 
 func (node *RaftNode) candidateWork() {
 	var timeout <-chan time.Time
-	var responses chan *RequestVoteReply
+	var responses *chan *RequestVoteReply
 	electionGrantedCount := 0
-	doErction := true
+	needEraction := true
 
 	for node.currentState() == CANDIDATE {
-		if doErction {
+		if needEraction {
 			node.increaseTerm()
-			log.WithField("node", "node.candidateWork").Info(goidForlog()+"do erection. tern :  ", node.currentTerm())
-
-			responses = make(chan *RequestVoteReply, len(node.peers))
-			arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.id}
-			for _, peer := range node.peers {
-				node.workGroup.Add(1)
-				go func(peer *RaftPeerNode, arg RequestVoteArgs) {
-					defer node.workGroup.Done()
-					if node.currentState() != CANDIDATE {
-						return
-					}
-
-					var reply RequestVoteReply
-					err := peer.RequestVote(arg, &reply)
-					if err != nil {
-						log.WithField("node", "node.candidateWork").Error(goidForlog()+"err : ", err)
-						node.removePeer(peer.id)
-						return
-					}
-
-					responses <- &reply
-				}(peer, arg)
-			}
-
-			doErction = false
 			electionGrantedCount++
 			node.leaderId = node.id
 
+			responses = node.doEraction()
+
 			timeout = timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+			needEraction = false
 		}
 
 		majorityCount := (len(node.peers) / 2) + 1
@@ -169,12 +150,12 @@ func (node *RaftNode) candidateWork() {
 			node.setState(STOP)
 		case <-timeout:
 			log.WithField("node", "node.candidateWork").Info(goidForlog() + "timeout. retry request vote")
-			doErction = true
+			needEraction = true
 			electionGrantedCount = 0
 			node.setTerm(node.currentTerm() - 1)
 		case arg := <-node.requestVoteSignal:
 			node.handleOnRequestVote(arg)
-		case res := <-responses:
+		case res := <-*responses:
 			node.applyRequestVote(res, &electionGrantedCount)
 		}
 	}
@@ -182,93 +163,56 @@ func (node *RaftNode) candidateWork() {
 
 func (node *RaftNode) leaderWork() {
 	log.WithField("node", "node.leaderWork").Info(goidForlog()+"current term : ", node.currentTerm())
-	type Result struct {
-		arg   *AppendEntriesArgs
-		reply *AppendEntriesReply
-	}
 
 	var timeout <-chan time.Time
-	var responses chan *Result
-	doHeartBeat := true
+	var responses *chan *AppendEntriesResult
+	needHeartBeat := true
 	appendSuccesCount := 0
 
 	for node.currentState() == LEADER {
-		if doHeartBeat {
-			log.WithField("node", "node.leaderWork").Info(goidForlog() + "heatbeat")
-			responses = make(chan *Result, len(node.peers))
+		if needHeartBeat {
+			responses = node.doHeartBeat()
 
-			arg := AppendEntriesArgs{
-				Term:              node.currentTerm(),
-				LeaderId:          node.id,
-				PrevLogIndex:      -1,
-				PrevLogTerm:       0,
-				Entries:           make([]LogEntry, 0),
-				LeaderCommitIndex: node.commitIndex,
-			}
-
-			for _, peer := range node.peers {
-				node.workGroup.Add(1)
-				node.nextIndex[peer.id] = int64(len(node.logs))
-				node.matchIndex[peer.id] = -1
-
-				go func(peer *RaftPeerNode, arg AppendEntriesArgs) {
-					defer node.workGroup.Done()
-
-					nextIndex := node.nextIndex[peer.id]
-					arg.PrevLogIndex = nextIndex - 1
-					if arg.PrevLogIndex >= 0 {
-						arg.PrevLogTerm = node.logs[arg.PrevLogIndex].Term
-					}
-
-					arg.Entries = append(arg.Entries, node.logs[nextIndex:]...)
-					log.WithField("node", "node.leaderWork.AppendEntries").Info(goidForlog(), "[", peer.id, "]arg : ", arg)
-
-					var reply AppendEntriesReply
-					err := peer.AppendEntries(arg, &reply)
-					if err != nil {
-						log.WithField("node", "node.leaderWork").Error(goidForlog()+"err : ", err)
-						node.removePeer(peer.id)
-						return
-					}
-
-					responses <- &Result{&arg, &reply}
-				}(peer, arg)
-			}
-
-			doHeartBeat = false
 			timeout = timer(DefaultHeartBeatMinTimeout, DefaultHeartBeatMaxTimeout)
-		}
-
-		majorityCount := (len(node.peers) / 2) + 1
-		if appendSuccesCount == majorityCount {
-			node.commitIndex = int64(len(node.logs) - 1)
-			log.WithField("node", "node.leaderWork").Info(goidForlog()+" commit!!. index : ", node.commitIndex)
-			return
+			needHeartBeat = false
 		}
 
 		select {
 		case <-node.stopped:
 			node.setState(STOP)
 		case <-timeout:
-			doHeartBeat = true
-		case result := <-responses:
-			log.WithField("node", "node.leaderWork").Info(goidForlog()+"response from peer ", result.reply.PeerId, " / ", *result.reply)
-			node.applyAppendEntries(result.arg, result.reply, &appendSuccesCount)
+			needHeartBeat = true
+		case result := <-*responses:
+			node.applyAppendEntries(result.sendEntryLen, result.reply, &appendSuccesCount)
+
+			majorityCount := (len(node.peers) / 2) + 1
+			if appendSuccesCount == majorityCount {
+				node.commitIndex = int64(len(node.logs) - 1)
+			}
 		}
 	}
 }
 
 func (node *RaftNode) addPeer(id int, peerNode *RaftPeerNode) {
+	log.WithField("node", "node.addPeer").Info(goidForlog()+" - id : ", id)
+
 	node.peerMutex.Lock()
 	defer node.peerMutex.Unlock()
+
 	node.peers[id] = peerNode
+	node.nextIndex[id] = int64(len(node.logs))
+	node.matchIndex[id] = -1
 }
 
 func (node *RaftNode) removePeer(id int) {
+	log.WithField("node", "node.removePeer").Info(goidForlog()+" - id : ", id)
+
 	node.peerMutex.Lock()
 	defer node.peerMutex.Unlock()
 	if peer := node.peers[id]; peer != nil {
 		delete(node.peers, id)
+		delete(node.nextIndex, id)
+		delete(node.matchIndex, id)
 	}
 }
 
@@ -299,6 +243,74 @@ func (node *RaftNode) onAppendEntries(args AppendEntriesArgs, reply *AppendEntri
 	*reply = response
 }
 
+func (node *RaftNode) doEraction() *chan *RequestVoteReply {
+	log.WithField("node", "node.doEraction").Info(goidForlog()+"do erection. tern :  ", node.currentTerm())
+	responses := make(chan *RequestVoteReply, len(node.peers))
+	arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.id}
+	for _, peer := range node.peers {
+		node.workGroup.Add(1)
+		go func(peer *RaftPeerNode, arg RequestVoteArgs) {
+			defer node.workGroup.Done()
+			if node.currentState() != CANDIDATE {
+				return
+			}
+
+			var reply RequestVoteReply
+			err := peer.RequestVote(arg, &reply)
+			if err != nil {
+				log.WithField("node", "node.doEraction").Error(goidForlog()+"err : ", err)
+				node.removePeer(peer.id)
+				return
+			}
+
+			responses <- &reply
+		}(peer, arg)
+	}
+	return &responses
+}
+
+func (node *RaftNode) doHeartBeat() *chan *AppendEntriesResult {
+	log.WithField("node", "node.doHeartBeat").Info(goidForlog() + "heatbeat")
+	responses := make(chan *AppendEntriesResult, len(node.peers))
+
+	arg := AppendEntriesArgs{
+		Term:              node.currentTerm(),
+		LeaderId:          node.id,
+		PrevLogIndex:      -1,
+		PrevLogTerm:       0,
+		Entries:           make([]LogEntry, 0),
+		LeaderCommitIndex: node.commitIndex,
+	}
+
+	for _, peer := range node.peers {
+		node.workGroup.Add(1)
+		go func(peer *RaftPeerNode, arg AppendEntriesArgs) {
+			defer node.workGroup.Done()
+
+			nextIndex := node.nextIndex[peer.id]
+			arg.PrevLogIndex = nextIndex - 1
+			if arg.PrevLogIndex >= 0 {
+				arg.PrevLogTerm = node.logs[arg.PrevLogIndex].Term
+			}
+
+			node.logMutex.Lock()
+			arg.Entries = node.logs[nextIndex:]
+			node.logMutex.Unlock()
+
+			var reply AppendEntriesReply
+			err := peer.AppendEntries(arg, &reply)
+			if err != nil {
+				log.WithField("node", "node.leaderWork").Error(goidForlog()+"err : ", err)
+				node.removePeer(peer.id)
+				return
+			}
+
+			responses <- &AppendEntriesResult{len(arg.Entries), &reply}
+		}(peer, arg)
+	}
+	return &responses
+}
+
 func (node *RaftNode) handleOnRequestVote(arg RequestVoteArgs) {
 	log.WithField("node", "node.handleOnRequestVote").Info(goidForlog() + " on Requse vote")
 
@@ -319,7 +331,10 @@ func (node *RaftNode) handleOnRequestVote(arg RequestVoteArgs) {
 }
 
 func (node *RaftNode) handleOnAppendEntries(arg AppendEntriesArgs) {
-	log.WithField("node", "node.handleOnAppendEntries").Info(goidForlog()+"on appendEntry. ", arg)
+	if len(arg.Entries) > 0 {
+		log.WithField("node", "node.handleOnAppendEntries").Info(goidForlog()+"on appendEntry. ", arg)
+	}
+
 	response := AppendEntriesReply{
 		Term:          node.currentTerm(),
 		Success:       false,
@@ -337,25 +352,32 @@ func (node *RaftNode) handleOnAppendEntries(arg AppendEntriesArgs) {
 	node.setTerm(arg.Term)
 
 	if !node.isValidPrevLogIndexAndTerm(arg.PrevLogTerm, arg.PrevLogIndex) {
-		logIndex := int64(len(node.logs)) - 1
-		conflictIndex := Min(arg.PrevLogIndex, logIndex)
-		conflictTerm := node.logs[conflictIndex].Term
+		var conflictIndex int64 = 0
+		var conflictTerm uint64 = 0
 
-		for {
-			if conflictIndex <= node.commitIndex {
-				break
+		if conflictIndex >= int64(len(node.logs)) {
+			conflictIndex = int64(len(node.logs))
+			conflictTerm = 0
+		} else {
+			logIndex := int64(len(node.logs)) - 1
+			conflictIndex = Min(arg.PrevLogIndex, logIndex)
+			conflictTerm = node.logs[conflictIndex].Term
+
+			for {
+				if conflictIndex <= node.commitIndex {
+					break
+				}
+
+				if node.logs[conflictIndex].Term != conflictTerm {
+					break
+				}
+
+				conflictIndex--
 			}
 
-			if node.logs[conflictIndex].Term != conflictTerm {
-				break
-			}
-
-			conflictIndex--
+			conflictIndex = Max(node.commitIndex+1, conflictIndex)
+			conflictTerm = node.logs[conflictIndex].Term
 		}
-
-		conflictIndex = Max(node.commitIndex+1, conflictIndex)
-		conflictTerm = node.logs[conflictIndex].Term
-
 		response.ConflictIndex = conflictIndex
 		response.ConflictTerm = conflictTerm
 		node.appendEntriesReplySignal <- response
@@ -402,11 +424,10 @@ func (node *RaftNode) applyRequestVote(response *RequestVoteReply, electionGrant
 	}
 }
 
-func (node *RaftNode) applyAppendEntries(request *AppendEntriesArgs, response *AppendEntriesReply, appendSuccesCount *int) {
+func (node *RaftNode) applyAppendEntries(sendEntryLen int, response *AppendEntriesReply, appendSuccesCount *int) {
 	if response.Term > node.currentTerm() {
 		node.setState(FOLLOWER)
 		node.setTerm(response.Term)
-		node.leaderId = request.LeaderId
 		return
 	}
 
@@ -418,10 +439,18 @@ func (node *RaftNode) applyAppendEntries(request *AppendEntriesArgs, response *A
 		return
 	}
 
-	node.nextIndex[peerId] += int64(len(request.Entries))
+	node.nextIndex[peerId] += int64(sendEntryLen)
 	node.matchIndex[peerId] = node.nextIndex[peerId] - 1
 
 	*appendSuccesCount++
+}
+
+func (node *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevlogIndex int64) bool {
+	if (prevlogIndex == -1) ||
+		((prevlogIndex < int64(len(node.logs))) && (prevLogTerm == node.logs[prevlogIndex].Term)) {
+		return true
+	}
+	return false
 }
 
 func (node *RaftNode) ApplyEntry(command []byte) bool {
@@ -434,12 +463,4 @@ func (node *RaftNode) ApplyEntry(command []byte) bool {
 
 	node.logs = append(node.logs, LogEntry{Term: node.currentTerm(), Command: command})
 	return true
-}
-
-func (node *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevlogIndex int64) bool {
-	if (prevlogIndex == -1) ||
-		((prevlogIndex < int64(len(node.logs))) && (prevLogTerm == node.logs[prevlogIndex].Term)) {
-		return true
-	}
-	return false
 }
