@@ -24,23 +24,21 @@ SOFTWARE.
 
 package raft
 
-type OnRequestVote = func(int) int
-
-type NetworkHandler interface {
-	OnRequestVote()
-	OnAppendEntries()
+type Responsor interface {
+	onRegistPeerNode(peer *RaftPeerNode)
+	onRequestVote(args *RequestVoteArgs, reply *RequestVoteReply)
+	onAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply)
 }
 
-type Request interface {
-	RegistPeerNode(arg *PeerNodeInfo, resp *RegistPeerNodeReply) error
-	RequestVote(arg *RequestVoteArgs, resp *RequestVoteReply) error
-	AppendEntries(arg *AppendEntriesArgs, resp *AppendEntriesReply) error
+type Requestor interface {
+	RegistPeerNode(arg *NodeInfo, reply *RegistPeerNodeReply) error
+	RequestVote(arg *RequestVoteArgs, reply *RequestVoteReply) error
+	AppendEntries(arg *AppendEntriesArgs, reply *AppendEntriesReply) error
 }
 
 type Transporter interface {
-	RegistHandler(handler *NetworkHandler)
+	RegistHandler(handler *Responsor)
+	ConnectToPeer(peerInfo NodeInfo) (*RaftPeerNode, error)
 	Serve(address string) error
-	ConnectToPeer(peerInfo PeerNodeInfo) error
-	IsRunning() bool
 	Stop()
 }

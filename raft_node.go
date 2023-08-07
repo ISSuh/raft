@@ -45,8 +45,8 @@ type AppendEntriesResult struct {
 }
 type RaftNode struct {
 	*NodeState
+	info NodeInfo
 
-	id       int
 	leaderId int
 	peers    map[int]*RaftPeerNode
 
@@ -69,11 +69,11 @@ type RaftNode struct {
 	workGroup sync.WaitGroup
 }
 
-func NewRafeNode(id int) *RaftNode {
+func NewRafeNode(nodeInfo NodeInfo) *RaftNode {
 	return &RaftNode{
 		NodeState: NewNodeState(),
-		id:        id,
-		leaderId:  id,
+		info: nodeInfo,
+		leaderId:  -1,
 
 		peers:           make(map[int]*RaftPeerNode),
 		timeoutDuration: DefaultElectionMinTimeout,
@@ -104,6 +104,10 @@ func (node *RaftNode) Stop() {
 
 	node.stopped <- true
 	node.workGroup.Wait()
+}
+
+func (node *RaftNode) Id() int {
+	return node.info.Id
 }
 
 func (node *RaftNode) loop() {
@@ -154,7 +158,7 @@ func (node *RaftNode) candidateWork() {
 		if needEraction {
 			node.increaseTerm()
 			electionGrantedCount++
-			node.leaderId = node.id
+			node.leaderId = node.info.Id
 
 			responses = node.doEraction()
 
@@ -240,28 +244,36 @@ func (node *RaftNode) removePeer(id int) {
 	}
 }
 
-func (node *RaftNode) getPeer(id int) *RaftPeerNode {
-	node.peerMutex.Lock()
-	defer node.peerMutex.Unlock()
-	if peer := node.peers[id]; peer != nil {
-		return peer
+func (node *RaftNode) onRegistPeerNode(peer *RaftPeerNode) {
+	node.addPeer(peer.id, peer)
+
+	myInfo := NodeInfo{
+		Id:      node.info.Id,
+		Address: node.info.Address,
 	}
-	return nil
+
+	// notify peer for regist me
+	var reply RegistPeerNodeReply
+	err := peer.RegistPeerNode(&myInfo, &reply)
+	if err != nil {
+		log.WithField("network", "node.onRegistPeerNode").Error(goidForlog()+"err : ", err)
+		return
+	}
 }
 
-func (node *RaftNode) onRequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
+func (node *RaftNode) onRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	node.peerMutex.Lock()
 	defer node.peerMutex.Unlock()
-	node.requestVoteSignal <- args
+	node.requestVoteSignal <- *args
 
 	response := <-node.requestVoteReplySignal
 	*reply = response
 }
 
-func (node *RaftNode) onAppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) {
+func (node *RaftNode) onAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	node.peerMutex.Lock()
 	defer node.peerMutex.Unlock()
-	node.appendEntriesSignal <- args
+	node.appendEntriesSignal <- *args
 
 	response := <-node.appendEntriesReplySignal
 	*reply = response
@@ -270,7 +282,7 @@ func (node *RaftNode) onAppendEntries(args AppendEntriesArgs, reply *AppendEntri
 func (node *RaftNode) doEraction() *chan *RequestVoteReply {
 	log.WithField("node", "node.doEraction").Info(goidForlog()+"do erection. tern :  ", node.currentTerm())
 	responses := make(chan *RequestVoteReply, len(node.peers))
-	arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.id}
+	arg := RequestVoteArgs{Term: node.currentTerm(), CandidateId: node.info.Id}
 	for _, peer := range node.peers {
 		node.workGroup.Add(1)
 		go func(peer *RaftPeerNode, arg RequestVoteArgs) {
@@ -280,7 +292,7 @@ func (node *RaftNode) doEraction() *chan *RequestVoteReply {
 			}
 
 			var reply RequestVoteReply
-			err := peer.RequestVote(arg, &reply)
+			err := peer.RequestVote(&arg, &reply)
 			if err != nil {
 				log.WithField("node", "node.doEraction").Error(goidForlog()+"err : ", err)
 				node.removePeer(peer.id)
@@ -299,7 +311,7 @@ func (node *RaftNode) doHeartBeat() *chan *AppendEntriesResult {
 
 	arg := AppendEntriesArgs{
 		Term:              node.currentTerm(),
-		LeaderId:          node.id,
+		LeaderId:          node.info.Id,
 		PrevLogIndex:      -1,
 		PrevLogTerm:       0,
 		Entries:           make([]LogEntry, 0),
@@ -322,7 +334,7 @@ func (node *RaftNode) doHeartBeat() *chan *AppendEntriesResult {
 			node.logMutex.Unlock()
 
 			var reply AppendEntriesReply
-			err := peer.AppendEntries(arg, &reply)
+			err := peer.AppendEntries(&arg, &reply)
 			if err != nil {
 				log.WithField("node", "node.leaderWork").Error(goidForlog()+"err : ", err)
 				node.removePeer(peer.id)
@@ -362,7 +374,7 @@ func (node *RaftNode) handleOnAppendEntries(arg AppendEntriesArgs) {
 	response := AppendEntriesReply{
 		Term:          node.currentTerm(),
 		Success:       false,
-		PeerId:        node.id,
+		PeerId:        node.info.Id,
 		ConflictIndex: -1,
 		ConflictTerm:  0,
 	}

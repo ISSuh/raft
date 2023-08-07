@@ -27,41 +27,63 @@ package raft
 import (
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 type RaftService struct {
-	id      int
 	node    *RaftNode
-	running bool
-
-	network *NetworkService
-
+	transporter Transporter
 	testBlock chan bool
 }
 
-func NewRaftService(id int) *RaftService {
+func NewRaftService(id int, address string) *RaftService {
 	logrus.SetFormatter(&nested.Formatter{
 		HideKeys:        true,
 		FieldsOrder:     []string{"network", "node", "peernode"},
 		TimestampFormat: "[2006:01:02 15:04:05.000]",
 	})
 
-	node := NewRafeNode(id)
+	node := NewRafeNode(NodeInfo{Id: id, Address: address})
 	service := &RaftService{
-		id:        id,
 		node:      node,
-		network:   NewNetworkService(id, node),
+		transporter: nil,
 		testBlock: make(chan bool),
 	}
 	return service
 }
 
-func (service *RaftService) Run(address string, peers []PeerNodeInfo) {
-	service.running = true
-	service.network.Serve(address)
+func (service *RaftService) Node() *RaftNode {
+	return service.node
+}
+
+func (service *RaftService) RegistTrasnporter(transporter Transporter) {
+	service.transporter = transporter;
+}
+
+func (service *RaftService) Run(peers []NodeInfo) {
+	err := service.transporter.Serve(service.node.info.Address);
+	if err != nil {
+		return
+	}
+
+	myInfo := NodeInfo{
+		Id:      service.node.info.Id,
+		Address: service.node.info.Address,
+	}
 
 	for _, peer := range peers {
-		service.network.ConnectToPeer(peer)
+		peerNode, err := service.transporter.ConnectToPeer(peer)
+		if err != nil {
+			continue
+		}
+
+		service.node.addPeer(peerNode.id, peerNode)
+
+		var reply RegistPeerNodeReply
+		err = peerNode.RegistPeerNode(&myInfo, &reply)
+		if err != nil {
+			log.WithField("network", "service.Run").Error(goidForlog()+"err : ", err)
+		}
 	}
 
 	service.node.Run()
@@ -71,9 +93,6 @@ func (service *RaftService) Run(address string, peers []PeerNodeInfo) {
 }
 
 func (service *RaftService) Stop() {
-	service.running = false
+	service.transporter.Stop()
 }
 
-func (service *RaftService) IsRunning() bool {
-	return service.running
-}

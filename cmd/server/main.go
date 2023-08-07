@@ -40,7 +40,7 @@ const (
 	Localhost     = "127.0.0.1"
 )
 
-func clientRequest(method, path string, node *raft.PeerNodeInfo) []raft.PeerNodeInfo {
+func clientRequest(method, path string, node *raft.NodeInfo) []raft.NodeInfo {
 	url := ClusterApiUrl + path
 	log.Println("clientRequest - url : ", url)
 	json, _ := json.Marshal(node)
@@ -60,7 +60,7 @@ func clientRequest(method, path string, node *raft.PeerNodeInfo) []raft.PeerNode
 	return HttpResponseHandler(res, expectArrayJson)
 }
 
-func HttpResponseHandler(resp *http.Response, expectArrayJson bool) []raft.PeerNodeInfo {
+func HttpResponseHandler(resp *http.Response, expectArrayJson bool) []raft.NodeInfo {
 	log.Println(resp.StatusCode)
 
 	switch resp.StatusCode {
@@ -72,8 +72,8 @@ func HttpResponseHandler(resp *http.Response, expectArrayJson bool) []raft.PeerN
 	}
 }
 
-func parseBody(resp *http.Response, expectArrayJson bool) []raft.PeerNodeInfo {
-	var res []raft.PeerNodeInfo
+func parseBody(resp *http.Response, expectArrayJson bool) []raft.NodeInfo {
+	var res []raft.NodeInfo
 	if expectArrayJson {
 		decoder := json.NewDecoder(resp.Body)
 		err := decoder.Decode(&res)
@@ -81,7 +81,7 @@ func parseBody(resp *http.Response, expectArrayJson bool) []raft.PeerNodeInfo {
 			return nil
 		}
 	} else {
-		var item raft.PeerNodeInfo
+		var item raft.NodeInfo
 		decoder := json.NewDecoder(resp.Body)
 		err := decoder.Decode(&item)
 		if err != nil {
@@ -114,10 +114,14 @@ func main() {
 	nodeList := clientRequest(http.MethodGet, "node", nil)
 	log.Println("peers : ", nodeList)
 
-	node := raft.PeerNodeInfo{Id: id, Address: address}
+	node := raft.NodeInfo{Id: id, Address: address}
 	clientRequest(http.MethodPost, "node/"+idStr, &node)
-	service := raft.NewRaftService(id)
-	service.Run(address, nodeList)
+
+	service := raft.NewRaftService(id, address)
+	service.RegistTrasnporter(
+		raft.NewRpcTransporter(service.Node()))
+
+	service.Run(nodeList)
 
 	service.Stop()
 	clientRequest(http.MethodDelete, "node/"+idStr, nil)

@@ -25,31 +25,26 @@ SOFTWARE.
 package raft
 
 import (
-	"net/rpc"
-
 	log "github.com/sirupsen/logrus"
 )
 
 type RaftPeerNode struct {
 	id      int
 	address string
-	client  *rpc.Client
+	requestor Requestor
 }
 
-func (peer *RaftPeerNode) RegistPeerNode(args interface{}, reply interface{}) error {
+func (peer *RaftPeerNode) RegistPeerNode(arg *NodeInfo, reply *RegistPeerNodeReply) error {
 	log.WithField("peer", "RaftPeerNode.RegistPeerNode").Info(goidForlog())
-	method := "Raft.RegistPeerNode"
-	return peer.client.Call(method, args, reply)
+	return peer.requestor.RegistPeerNode(arg, reply)
 }
 
-func (peer *RaftPeerNode) RequestVote(args interface{}, reply interface{}) error {
+func (peer *RaftPeerNode) RequestVote(arg *RequestVoteArgs, reply *RequestVoteReply) error {
 	log.WithField("peer", "RaftPeerNode.RequestVote").Info(goidForlog())
-	method := "Raft.RequestVote"
-	return peer.client.Call(method, args, reply)
+	return peer.requestor.RequestVote(arg, reply)
 }
 
-func (peer *RaftPeerNode) AppendEntries(args interface{}, reply interface{}) error {
+func (peer *RaftPeerNode) AppendEntries(arg *AppendEntriesArgs, reply *AppendEntriesReply) error {
 	// log.WithField("peer", "RaftPeerNode.AppendEntries").Info(goidForlog())
-	method := "Raft.AppendEntries"
-	return peer.client.Call(method, args, reply)
+	return peer.requestor.AppendEntries(arg, reply)
 }

@@ -37,7 +37,7 @@ type ApplyEntryReply struct {
 	Success bool
 }
 
-type PeerNodeInfo struct {
+type NodeInfo struct {
 	Id      int    `json:"id"`
 	Address string `json:"address"`
 }

@@ -1,19 +1,12 @@
 syntax = "proto3";
+
 package raft;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+option go_package = "github.com/ISSuh/raft/proto";
 
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.sizer_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-option (gogoproto.goproto_enum_prefix_all) = false;
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
-
-message Entry {
+message LogEntry {
   uint64 term = 1;
   uint64 index = 2;
-	bytes log  = 3;
+	bytes log = 3;
 }
+
