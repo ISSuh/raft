@@ -30,6 +30,7 @@ import (
 	"net/rpc"
 	"sync"
 
+	"github.com/ISSuh/raft/message"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -41,31 +42,30 @@ type RpcRequestor struct {
 	client  *rpc.Client
 }
 
-func (resquestor *RpcRequestor) RegistPeerNode(arg *NodeInfo, reply *RegistPeerNodeReply) error {
-	log.WithField("peer", "RaftPeerNode.RegistPeerNode").Info(goidForlog())
+func (resquestor *RpcRequestor) RegistPeerNode(arg *message.RegistPeer, reply *bool) error {
+	log.WithField("RpcTransporter", "RaftPeerNode.RegistPeerNode").Info(goidForlog())
 	method := "Raft.RegistPeerNode"
 	return resquestor.client.Call(method, arg, reply)
 }
 
-func (resquestor *RpcRequestor) RequestVote(arg *RequestVoteArgs, reply *RequestVoteReply) error {
-	log.WithField("peer", "RaftPeerNode.RequestVote").Info(goidForlog())
+func (resquestor *RpcRequestor) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
+	log.WithField("RpcTransporter", "RaftPeerNode.RequestVote").Info(goidForlog())
 	method := "Raft.RequestVote"
 	return resquestor.client.Call(method, arg, reply)
 }
 
-func (resquestor *RpcRequestor) AppendEntries(arg *AppendEntriesArgs, reply *AppendEntriesReply) error {
-	// log.WithField("peer", "RaftPeerNode.AppendEntries").Info(goidForlog())
+func (resquestor *RpcRequestor) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
+	log.WithField("RpcTransporter", "RaftPeerNode.AppendEntries").Info(goidForlog())
 	method := "Raft.AppendEntries"
 	return resquestor.client.Call(method, arg, reply)
 }
 
 type RpcTransporter struct {
-	address string
 	listener  net.Listener
 	rpcServer *rpc.Server
 	handler Responsor
 
-	peers map[int]NodeInfo
+	peers map[int]*message.RegistPeer
 
 	running bool
 	quitSinal chan interface{}
@@ -78,7 +78,7 @@ func NewRpcTransporter(handler Responsor) *RpcTransporter {
 	transporter := &RpcTransporter{
 		rpcServer: rpc.NewServer(),
 		handler: handler,
-		peers: map[int]NodeInfo{},
+		peers: map[int]*message.RegistPeer{},
 		running: false,
 	}
 	return transporter
@@ -96,11 +96,11 @@ func (rpcTransporter *RpcTransporter) Serve(address string) error {
 
 	rpcTransporter.listener, err = net.Listen("tcp", address)
 	if err != nil {
-		log.WithField("network", "network.Serve").Fatal(err)
+		log.WithField("RpcTransporter", "transporter.Serve").Fatal(err)
 		return err
 	}
 
-	log.WithField("network", "network.Serve").Info(goidForlog()+"listening at ", rpcTransporter.listener.Addr())
+	log.WithField("RpcTransporter", "transporter.Serve").Info(goidForlog()+"listening at ", rpcTransporter.listener.Addr())
 
 	rpcTransporter.wg.Add(1)
 	go func() {
@@ -113,12 +113,12 @@ func (rpcTransporter *RpcTransporter) Serve(address string) error {
 				case <-rpcTransporter.quitSinal:
 					return
 				default:
-					log.WithField("network", "network.Serve").Fatal(goidForlog()+"accept error:", err)
+					log.WithField("RpcTransporter", "transporter.Serve").Fatal(goidForlog()+"accept error:", err)
 					continue
 				}
 			}
 
-			log.WithField("network", "network.Serve").Info(goidForlog()+"connected : ", conn.RemoteAddr().String())
+			log.WithField("RpcTransporter", "transporter.Serve").Info(goidForlog()+"connected : ", conn.RemoteAddr().String())
 			rpcTransporter.wg.Add(1)
 			go func() {
 				rpcTransporter.rpcServer.ServeConn(conn)
@@ -129,17 +129,17 @@ func (rpcTransporter *RpcTransporter) Serve(address string) error {
 	return nil
 }
 
-func (rpcTransporter *RpcTransporter) ConnectToPeer(peerInfo NodeInfo) (*RaftPeerNode, error) {
-	log.WithField("network", "network.ConnectToPeer").Info(goidForlog()+"peer : ", peerInfo)
-	peerId := peerInfo.Id
+func (rpcTransporter *RpcTransporter) ConnectToPeer(peerInfo *message.RegistPeer) (*RaftPeerNode, error) {
+	log.WithField("RpcTransporter", "transporter.ConnectToPeer").Info(goidForlog()+"peer : ", peerInfo.String())
+	peerId := int(peerInfo.GetId())
 	addr, err := net.ResolveTCPAddr("tcp", peerInfo.Address)
 	if err != nil {
-		log.WithField("network", "network.ConnectToPeer").Error(goidForlog()+"err : ", err)
+		log.WithField("RpcTransporter", "transporter.ConnectToPeer").Error(goidForlog()+"err : ", err)
 		return nil, err
 	}
 
 	if _, exist := rpcTransporter.peers[peerId]; exist {
-		log.WithField("network", "network.ConnectToPeer").Warn(goidForlog()+"alread registed. ", peerId)
+		log.WithField("RpcTransporter", "transporter.ConnectToPeer").Warn(goidForlog()+"alread registed. ", peerId)
 		return nil, errors.New("already exsit peer node")
 	}
 
@@ -148,14 +148,14 @@ func (rpcTransporter *RpcTransporter) ConnectToPeer(peerInfo NodeInfo) (*RaftPee
 	defer rpcTransporter.mutex.Unlock()
 	client, err := rpc.Dial(addr.Network(), addr.String())
 	if err != nil {
-		log.WithField("network", "network.ConnectToPeer").Error(goidForlog()+"err : ", err)
+		log.WithField("RpcTransporter", "transporter.ConnectToPeer").Error(goidForlog()+"err : ", err)
 		return nil, err
 	}
 
 	// regist peer
 	peerNode := &RaftPeerNode{
-		id:      peerInfo.Id,
-		address: peerInfo.Address,
+		id:      		int(peerInfo.GetId()),
+		address: 		peerInfo.Address,
 		requestor:  &RpcRequestor{client},
 	}
 
@@ -169,20 +169,19 @@ func (rpcTransporter *RpcTransporter) Stop() {
 	rpcTransporter.wg.Wait()
 }
 
-func (rpcTransporter *RpcTransporter) RegistPeerNode(args *NodeInfo, reply *RegistPeerNodeReply) error {
-	log.WithField("network", "network.RegistPeerNode").Info(goidForlog())
-
-	peerNode, err := rpcTransporter.ConnectToPeer(*args)
+func (rpcTransporter *RpcTransporter) RegistPeerNode(args *message.RegistPeer, reply *bool) error {
+	log.WithField("RpcTransporter", "transporter.RegistPeerNode").Info(goidForlog())
+	peerNode, err := rpcTransporter.ConnectToPeer(args)
 	if peerNode != nil {
 		rpcTransporter.handler.onRegistPeerNode(peerNode)
 	}
 
-	reply.Regist = (err == nil)
+	*reply = (err == nil)
 	return err
 }
 
-func (rpcTransporter *RpcTransporter) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) error {
-	log.WithField("network", "network.RequestVote").Info(goidForlog())
+func (rpcTransporter *RpcTransporter) RequestVote(args *message.RequestVote, reply *message.RequestVoteReply) error {
+	log.WithField("RpcTransporter", "transporter.RequestVote").Info(goidForlog())
 	if rpcTransporter.handler == nil {
 		return errors.New("invalid handler")
 	}
@@ -190,8 +189,8 @@ func (rpcTransporter *RpcTransporter) RequestVote(args *RequestVoteArgs, reply *
 	return nil
 }
 
-func (rpcTransporter *RpcTransporter) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) error {
-	log.WithField("network", "network.AppendEntries").Info(goidForlog())
+func (rpcTransporter *RpcTransporter) AppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply) error {
+	log.WithField("RpcTransporter", "transporter.AppendEntries").Info(goidForlog())
 	if rpcTransporter.handler == nil {
 		return errors.New("invalid handler")
 	}

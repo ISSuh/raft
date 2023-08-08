@@ -30,7 +30,7 @@ import (
 	"net/rpc"
 	"os"
 
-	"github.com/ISSuh/raft"
+	"github.com/ISSuh/raft/message"
 )
 
 const (
@@ -60,15 +60,15 @@ func main() {
 		return
 	}
 
-	applyEntry := raft.ApplyEntry{
-		Command: []byte("TEST"),
+	applyEntry := message.ApplyEntry{
+		Log: []byte("TEST"),
 	}
 
-	var applyEntryReply raft.ApplyEntryReply
-	err = client.Call(RpcMethod, applyEntry, &applyEntryReply)
+	var reply bool
+	err = client.Call(RpcMethod, &applyEntry, &reply)
 	if err != nil {
 		log.Println("client.Call err : ", err)
 	}
 
-	log.Println("respone: ", applyEntryReply.Success)
+	log.Println("respone: ", reply)
 }

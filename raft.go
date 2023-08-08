@@ -25,9 +25,9 @@ SOFTWARE.
 package raft
 
 import (
+	"github.com/ISSuh/raft/message"
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 )
 
 type RaftService struct {
@@ -43,7 +43,7 @@ func NewRaftService(id int, address string) *RaftService {
 		TimestampFormat: "[2006:01:02 15:04:05.000]",
 	})
 
-	node := NewRafeNode(NodeInfo{Id: id, Address: address})
+	node := NewRaftNode(NodeInfo{Id: id, Address: address})
 	service := &RaftService{
 		node:      node,
 		transporter: nil,
@@ -60,39 +60,51 @@ func (service *RaftService) RegistTrasnporter(transporter Transporter) {
 	service.transporter = transporter;
 }
 
-func (service *RaftService) Run(peers []NodeInfo) {
+func (service *RaftService) Run() {
 	err := service.transporter.Serve(service.node.info.Address);
 	if err != nil {
 		return
 	}
 
-	myInfo := NodeInfo{
-		Id:      service.node.info.Id,
+	service.node.Run()
+}
+
+func (service *RaftService) ConnectToPeers(peers map[int]string) {
+	myInfo := message.RegistPeer{
+		Id:      int32(service.node.info.Id),
 		Address: service.node.info.Address,
 	}
 
-	for _, peer := range peers {
-		peerNode, err := service.transporter.ConnectToPeer(peer)
+	for peerId, peerAddress := range peers {
+		peerNode, err := service.transporter.ConnectToPeer(
+			&message.RegistPeer{
+				Id: int32(peerId),
+				Address: peerAddress,
+			})
 		if err != nil {
 			continue
 		}
 
 		service.node.addPeer(peerNode.id, peerNode)
 
-		var reply RegistPeerNodeReply
+		var reply bool
 		err = peerNode.RegistPeerNode(&myInfo, &reply)
-		if err != nil {
-			log.WithField("network", "service.Run").Error(goidForlog()+"err : ", err)
+		if err != nil || !reply {
+			logrus.WithField("network", "service.Run").Error(goidForlog()+"err : ", err)
 		}
 	}
+}
 
-	service.node.Run()
-
-	// for test
-	<-service.testBlock
+func (service *RaftService) ApplyEntries(entris [][]byte) {
+	for _, entry := range entris {
+		service.node.ApplyEntry(entry)
+	}
 }
 
 func (service *RaftService) Stop() {
+	// for test
+	<-service.testBlock
+
 	service.transporter.Stop()
 }
 

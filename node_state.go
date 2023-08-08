@@ -43,15 +43,11 @@ type NodeState struct {
 }
 
 func NewNodeState() *NodeState {
-	return &NodeState{state: FOLLOWER}
+	return &NodeState{state: FOLLOWER, term: 0}
 }
 
 func (nodeState *NodeState) currentState() State {
 	return State(atomic.LoadUint32((*uint32)(&nodeState.state)))
-}
-
-func (nodeState *NodeState) compare(state State) bool {
-	return nodeState.currentState() == state
 }
 
 func (nodeState *NodeState) setState(state State) {

@@ -121,7 +121,14 @@ func main() {
 	service.RegistTrasnporter(
 		raft.NewRpcTransporter(service.Node()))
 
-	service.Run(nodeList)
+	service.Run()
+
+	peerMap := make(map[int]string)
+	for _, node := range nodeList {
+		peerMap[node.Id] = node.Address
+	}
+
+	service.ConnectToPeers(peerMap)
 
 	service.Stop()
 	clientRequest(http.MethodDelete, "node/"+idStr, nil)

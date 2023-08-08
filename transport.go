@@ -24,21 +24,23 @@ SOFTWARE.
 
 package raft
 
+import "github.com/ISSuh/raft/message"
+
 type Responsor interface {
 	onRegistPeerNode(peer *RaftPeerNode)
-	onRequestVote(args *RequestVoteArgs, reply *RequestVoteReply)
-	onAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply)
+	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
+	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
 }
 
 type Requestor interface {
-	RegistPeerNode(arg *NodeInfo, reply *RegistPeerNodeReply) error
-	RequestVote(arg *RequestVoteArgs, reply *RequestVoteReply) error
-	AppendEntries(arg *AppendEntriesArgs, reply *AppendEntriesReply) error
+	RegistPeerNode(arg *message.RegistPeer, reply *bool) error
+	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
+	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
 }
 
 type Transporter interface {
 	RegistHandler(handler *Responsor)
-	ConnectToPeer(peerInfo NodeInfo) (*RaftPeerNode, error)
+	ConnectToPeer(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
 	Serve(address string) error
 	Stop()
 }

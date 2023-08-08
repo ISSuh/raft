@@ -24,56 +24,40 @@ SOFTWARE.
 
 package raft
 
-type LogEntry struct {
-	Term    uint64
-	Command []byte
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+const (
+	TestId = 0
+	TestAddress = "0.0.0.0:33660"
+)
+
+func TestNewRaftNode(t *testing.T) {
+	node := NewRaftNode(NodeInfo{Id: TestId, Address: TestAddress})
+	assert.NotEqual(t, node, (*RaftNode)(nil))
+	assert.Equal(t, node.state, FOLLOWER)
+	assert.Equal(t, node.currentTerm(), uint64(0))
 }
 
-type ApplyEntry struct {
-	Command []byte
+func TestRunAndStop(t *testing.T) {
+	node := NewRaftNode(NodeInfo{Id: TestId, Address: TestAddress})
+	assert.NotEqual(t, node, (*RaftNode)(nil))
+
+	node.Run()
+	time.Sleep(100 * time.Millisecond)
+
+	node.Stop()
+	assert.Equal(t, node.currentState(), STOP)
 }
 
-type ApplyEntryReply struct {
-	Success bool
-}
+func TestFollwerWork(t *testing.T) {
+	node := NewRaftNode(NodeInfo{Id: TestId, Address: TestAddress})
+	assert.NotEqual(t, node, (*RaftNode)(nil))
 
-type NodeInfo struct {
-	Id      int    `json:"id"`
-	Address string `json:"address"`
-}
-
-type RegistPeerNodeReply struct {
-	Regist bool
-}
-
-type RequestVoteArgs struct {
-	Term        uint64
-	CandidateId int
-	// LastLogIndex int
-	// LastLogTerm  int
-}
-
-type RequestVoteReply struct {
-	Term        uint64
-	VoteGranted bool
-}
-
-type AppendEntriesArgs struct {
-	Term     uint64
-	LeaderId int
-
-	PrevLogIndex      int64
-	PrevLogTerm       uint64
-	Entries           []LogEntry
-	LeaderCommitIndex int64
-}
-
-type AppendEntriesReply struct {
-	Term    uint64
-	Success bool
-
-	PeerId int
-
-	ConflictIndex int64
-	ConflictTerm  uint64
+	node.follwerWork()
+	assert.Equal(t, node.currentState(), CANDIDATE)
 }

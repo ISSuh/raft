@@ -25,7 +25,7 @@ SOFTWARE.
 package raft
 
 import (
-	log "github.com/sirupsen/logrus"
+	"github.com/ISSuh/raft/message"
 )
 
 type RaftPeerNode struct {
@@ -34,17 +34,14 @@ type RaftPeerNode struct {
 	requestor Requestor
 }
 
-func (peer *RaftPeerNode) RegistPeerNode(arg *NodeInfo, reply *RegistPeerNodeReply) error {
-	log.WithField("peer", "RaftPeerNode.RegistPeerNode").Info(goidForlog())
+func (peer *RaftPeerNode) RegistPeerNode(arg *message.RegistPeer, reply *bool) error {
 	return peer.requestor.RegistPeerNode(arg, reply)
 }
 
-func (peer *RaftPeerNode) RequestVote(arg *RequestVoteArgs, reply *RequestVoteReply) error {
-	log.WithField("peer", "RaftPeerNode.RequestVote").Info(goidForlog())
+func (peer *RaftPeerNode) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
 	return peer.requestor.RequestVote(arg, reply)
 }
 
-func (peer *RaftPeerNode) AppendEntries(arg *AppendEntriesArgs, reply *AppendEntriesReply) error {
-	// log.WithField("peer", "RaftPeerNode.AppendEntries").Info(goidForlog())
+func (peer *RaftPeerNode) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
 	return peer.requestor.AppendEntries(arg, reply)
 }
