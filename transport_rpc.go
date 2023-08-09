@@ -74,18 +74,17 @@ type RpcTransporter struct {
 	wg    sync.WaitGroup
 }
 
-func NewRpcTransporter(handler Responsor) *RpcTransporter {
+func NewRpcTransporter() *RpcTransporter {
 	transporter := &RpcTransporter{
 		rpcServer: rpc.NewServer(),
-		handler: handler,
 		peers: map[int]*message.RegistPeer{},
 		running: false,
 	}
 	return transporter
 }
 
-func (rpcTransporter *RpcTransporter) RegistHandler(handler *Responsor) {
-	rpcTransporter.handler = *handler
+func (rpcTransporter *RpcTransporter) RegistHandler(handler Responsor) {
+	rpcTransporter.handler = handler
 }
 
 func (rpcTransporter *RpcTransporter) Serve(address string) error {

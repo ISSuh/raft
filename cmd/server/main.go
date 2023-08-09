@@ -118,8 +118,7 @@ func main() {
 	clientRequest(http.MethodPost, "node/"+idStr, &node)
 
 	service := raft.NewRaftService(id, address)
-	service.RegistTrasnporter(
-		raft.NewRpcTransporter(service.Node()))
+	service.RegistTrasnporter(raft.NewRpcTransporter())
 
 	service.Run()
 

@@ -58,6 +58,7 @@ func (service *RaftService) Node() *RaftNode {
 
 func (service *RaftService) RegistTrasnporter(transporter Transporter) {
 	service.transporter = transporter;
+	transporter.RegistHandler(service.node)
 }
 
 func (service *RaftService) Run() {

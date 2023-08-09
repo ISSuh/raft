@@ -25,6 +25,8 @@ SOFTWARE.
 package raft
 
 import (
+	"bytes"
+	"encoding/gob"
 	"sync"
 	"time"
 
@@ -38,6 +40,9 @@ const (
 
 	DefaultHeartBeatMinTimeout = 100 * time.Millisecond
 	DefaultHeartBeatMaxTimeout = 150 * time.Millisecond
+
+	StorageTermKey = "term"
+	StorageLogKey = "log"
 )
 
 type NodeInfo struct {
@@ -60,6 +65,7 @@ type RaftNode struct {
 	timeoutDuration time.Duration
 	stopped         chan bool
 
+	storage 		Storage
 	logs        []*message.LogEntry
 	commitIndex int64
 	nextIndex   map[int]int64
@@ -86,6 +92,7 @@ func NewRaftNode(nodeInfo NodeInfo) *RaftNode {
 		timeoutDuration: DefaultElectionMinTimeout,
 		stopped:         make(chan bool),
 
+		storage: 			NewMapStorage(),
 		logs:        make([]*message.LogEntry, 0),
 		commitIndex: -1,
 		nextIndex:   make(map[int]int64),
@@ -113,10 +120,6 @@ func (node *RaftNode) Stop() {
 	node.workGroup.Wait()
 }
 
-func (node *RaftNode) Id() int {
-	return node.info.Id
-}
-
 func (node *RaftNode) loop() {
 	log.WithField("node", "node.loop").Info(goidForlog() + "run loop")
 
@@ -137,6 +140,8 @@ func (node *RaftNode) loop() {
 }
 
 func (node *RaftNode) follwerWork() {
+	log.WithField("node", "node.follwerWork").Info(goidForlog())
+
 	for node.currentState() == FOLLOWER {
 		timeout := timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
 
@@ -375,18 +380,21 @@ func (node *RaftNode) handleOnAppendEntries(arg *message.AppendEntries) {
 	}
 
 	response := message.AppendEntriesReply{
-		Term:          node.currentTerm(),
+		Term:          arg.Term,
 		Success:       false,
 		PeerId:        int32(node.info.Id),
 		ConflictIndex: -1,
 		ConflictTerm:  0,
 	}
 
+	// peer term is less than me. return false to peer
 	if arg.Term < node.currentTerm() {
+		response.Term = node.currentTerm()
 		node.appendEntriesReplySignal <- &response
 		return
 	}
 
+	// peer term is bigger than me. 
 	node.setState(FOLLOWER)
 	node.setTerm(arg.Term)
 
@@ -423,6 +431,7 @@ func (node *RaftNode) handleOnAppendEntries(arg *message.AppendEntries) {
 		return
 	}
 
+	// calculate received entries index and node.log index for save entries
 	logInsertIndex := arg.PrevLogIndex + 1
 	newEntriesIndex := 0
 	for {
@@ -438,14 +447,17 @@ func (node *RaftNode) handleOnAppendEntries(arg *message.AppendEntries) {
 		newEntriesIndex++
 	}
 
+	// save entries
 	if newEntriesIndex < len(arg.Entries) {
 		node.logs = append(node.logs[:logInsertIndex], arg.Entries[newEntriesIndex:]...)
 	}
 
+	// check need commit
 	if arg.LeaderCommitIndex > node.commitIndex {
 		logIndex := int64(len(node.logs) - 1)
 		node.commitIndex = Min(arg.LeaderCommitIndex, logIndex)
-		// need commit
+		// commit log
+		node.saveToStorage()
 	}
 
 	response.Success = true
@@ -490,6 +502,47 @@ func (node *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevlogInde
 		return true
 	}
 	return false
+}
+
+func (node *RaftNode)	saveToStorage() {
+	node.logMutex.Lock()
+	defer node.logMutex.Unlock()
+
+	var termBuffer bytes.Buffer
+	if err := gob.NewEncoder(&termBuffer).Encode(node.currentTerm()); err != nil {
+		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+		return
+	}
+
+	node.storage.Set(StorageTermKey, termBuffer.Bytes())
+
+	var logBuffer bytes.Buffer
+	if err := gob.NewEncoder(&logBuffer).Encode(node.logs); err != nil {
+		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+		return
+	}
+
+	node.storage.Set(StorageLogKey, logBuffer.Bytes())
+}
+
+// todo
+func (node *RaftNode)	restoreFromStorage() {
+	if buffer := node.storage.Get(StorageTermKey); buffer != nil {
+		data := gob.NewDecoder(bytes.NewBuffer(buffer))
+		var term uint64 = 0
+		if err := data.Decode(&term); err == nil {
+			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+		} else {
+			node.setTerm(term)
+		}
+	}
+
+	if buffer := node.storage.Get(StorageLogKey); buffer != nil {
+		data := gob.NewDecoder(bytes.NewBuffer(buffer))
+		if err := data.Decode(&node.logs); err != nil {
+			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+		}
+	}
 }
 
 func (node *RaftNode) ApplyEntry(command []byte) bool {

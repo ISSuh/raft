@@ -24,23 +24,27 @@ SOFTWARE.
 
 package raft
 
-import "github.com/ISSuh/raft/message"
+import "sync"
 
-type Responsor interface {
-	onRegistPeerNode(peer *RaftPeerNode)
-	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
-	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
+type MapStorage struct {
+	engine map[string][]byte
+	mutex sync.Mutex
 }
 
-type Requestor interface {
-	RegistPeerNode(arg *message.RegistPeer, reply *bool) error
-	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
-	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
+func NewMapStorage() *MapStorage {
+	return &MapStorage{
+		engine: make(map[string][]byte),
+	}
 }
 
-type Transporter interface {
-	RegistHandler(handler Responsor)
-	ConnectToPeer(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
-	Serve(address string) error
-	Stop()
+func (storage *MapStorage) Set(key string, value []byte) {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	storage.engine[key] = value
+}
+
+func (storage *MapStorage) Get(key string) []byte {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	return storage.engine[key]
 }

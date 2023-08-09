@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ISSuh/raft/message"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,6 +36,25 @@ const (
 	TestId = 0
 	TestAddress = "0.0.0.0:33660"
 )
+
+var TestRequestVoteMessage message.RequestVote
+var TestAppendEntriesMessage message.AppendEntries
+
+func init() {
+	TestRequestVoteMessage = message.RequestVote{
+		Term: 1,
+		CandidateId: 5,
+	}
+
+	TestAppendEntriesMessage = message.AppendEntries{
+		Term: 1,
+		LeaderId: 5,
+		PrevLogIndex: -1,
+		PrevLogTerm: 0,
+		Entries: nil,
+		LeaderCommitIndex: 0,
+	}
+}
 
 func TestNewRaftNode(t *testing.T) {
 	node := NewRaftNode(NodeInfo{Id: TestId, Address: TestAddress})
@@ -58,6 +78,42 @@ func TestFollwerWork(t *testing.T) {
 	node := NewRaftNode(NodeInfo{Id: TestId, Address: TestAddress})
 	assert.NotEqual(t, node, (*RaftNode)(nil))
 
-	node.follwerWork()
-	assert.Equal(t, node.currentState(), CANDIDATE)
+	{
+		node.follwerWork()
+		assert.Equal(t, node.currentState(), CANDIDATE)
+	}
+
+	node.setState(FOLLOWER)
+
+	{
+		go node.follwerWork()
+		node.stopped <- true
+		assert.Equal(t, node.currentState(), STOP)
+	}
+
+	node.setState(FOLLOWER)
+
+	{
+		go node.follwerWork()
+		node.requestVoteSignal <- &TestRequestVoteMessage
+		requestVoteReplyMsg := <- node.requestVoteReplySignal
+
+		assert.Equal(t, node.currentState(), FOLLOWER)
+		assert.NotEqual(t, requestVoteReplyMsg, (*RaftNode)(nil))
+		assert.Equal(t, requestVoteReplyMsg.Term, TestRequestVoteMessage.Term)
+		assert.Equal(t, requestVoteReplyMsg.VoteGranted, true)
+	}
+
+	node.setState(FOLLOWER)
+
+	{
+		go node.follwerWork()
+		node.appendEntriesSignal <- &TestAppendEntriesMessage
+		appendEntriesReplyMsg := <- node.appendEntriesReplySignal
+
+		assert.Equal(t, node.currentState(), FOLLOWER)
+		assert.NotEqual(t, appendEntriesReplyMsg, (*RaftNode)(nil))
+		assert.Equal(t, appendEntriesReplyMsg.Term, TestRequestVoteMessage.Term)
+		assert.Equal(t, appendEntriesReplyMsg.Success, true)
+	}
 }
