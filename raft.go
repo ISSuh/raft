@@ -103,9 +103,6 @@ func (service *RaftService) ApplyEntries(entris [][]byte) {
 }
 
 func (service *RaftService) Stop() {
-	// for test
-	<-service.testBlock
-
 	service.transporter.Stop()
 }
 
