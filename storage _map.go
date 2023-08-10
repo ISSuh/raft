@@ -28,7 +28,7 @@ import "sync"
 
 type MapStorage struct {
 	engine map[string][]byte
-	mutex sync.Mutex
+	mutex  sync.Mutex
 }
 
 func NewMapStorage() *MapStorage {

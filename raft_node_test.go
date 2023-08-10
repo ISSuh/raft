@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	TestId = 0
+	TestId      = 0
 	TestAddress = "0.0.0.0:33660"
 )
 
@@ -42,16 +42,16 @@ var TestAppendEntriesMessage message.AppendEntries
 
 func init() {
 	TestRequestVoteMessage = message.RequestVote{
-		Term: 1,
+		Term:        1,
 		CandidateId: 5,
 	}
 
 	TestAppendEntriesMessage = message.AppendEntries{
-		Term: 1,
-		LeaderId: 5,
-		PrevLogIndex: -1,
-		PrevLogTerm: 0,
-		Entries: nil,
+		Term:              1,
+		LeaderId:          5,
+		PrevLogIndex:      -1,
+		PrevLogTerm:       0,
+		Entries:           nil,
 		LeaderCommitIndex: 0,
 	}
 }
@@ -96,7 +96,7 @@ func TestFollwerWork(t *testing.T) {
 	{
 		go node.follwerWork()
 		node.requestVoteSignal <- &TestRequestVoteMessage
-		requestVoteReplyMsg := <- node.requestVoteReplySignal
+		requestVoteReplyMsg := <-node.requestVoteReplySignal
 
 		assert.Equal(t, node.currentState(), FOLLOWER)
 		assert.NotEqual(t, requestVoteReplyMsg, (*RaftNode)(nil))
@@ -109,7 +109,7 @@ func TestFollwerWork(t *testing.T) {
 	{
 		go node.follwerWork()
 		node.appendEntriesSignal <- &TestAppendEntriesMessage
-		appendEntriesReplyMsg := <- node.appendEntriesReplySignal
+		appendEntriesReplyMsg := <-node.appendEntriesReplySignal
 
 		assert.Equal(t, node.currentState(), FOLLOWER)
 		assert.NotEqual(t, appendEntriesReplyMsg, (*RaftNode)(nil))

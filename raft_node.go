@@ -42,11 +42,11 @@ const (
 	DefaultHeartBeatMaxTimeout = 150 * time.Millisecond
 
 	StorageTermKey = "term"
-	StorageLogKey = "log"
+	StorageLogKey  = "log"
 )
 
 type NodeInfo struct {
-	Id int
+	Id      int
 	Address string
 }
 
@@ -65,7 +65,7 @@ type RaftNode struct {
 	timeoutDuration time.Duration
 	stopped         chan bool
 
-	storage 		Storage
+	storage     Storage
 	logs        []*message.LogEntry
 	commitIndex int64
 	nextIndex   map[int]int64
@@ -85,14 +85,14 @@ type RaftNode struct {
 func NewRaftNode(nodeInfo NodeInfo) *RaftNode {
 	return &RaftNode{
 		NodeState: NewNodeState(),
-		info: nodeInfo,
+		info:      nodeInfo,
 		leaderId:  -1,
 
 		peers:           make(map[int]*RaftPeerNode),
 		timeoutDuration: DefaultElectionMinTimeout,
 		stopped:         make(chan bool),
 
-		storage: 			NewMapStorage(),
+		storage:     NewMapStorage(),
 		logs:        make([]*message.LogEntry, 0),
 		commitIndex: -1,
 		nextIndex:   make(map[int]int64),
@@ -394,7 +394,7 @@ func (node *RaftNode) handleOnAppendEntries(arg *message.AppendEntries) {
 		return
 	}
 
-	// peer term is bigger than me. 
+	// peer term is bigger than me.
 	node.setState(FOLLOWER)
 	node.setTerm(arg.Term)
 
@@ -504,13 +504,13 @@ func (node *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevlogInde
 	return false
 }
 
-func (node *RaftNode)	saveToStorage() {
+func (node *RaftNode) saveToStorage() {
 	node.logMutex.Lock()
 	defer node.logMutex.Unlock()
 
 	var termBuffer bytes.Buffer
 	if err := gob.NewEncoder(&termBuffer).Encode(node.currentTerm()); err != nil {
-		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
 		return
 	}
 
@@ -518,7 +518,7 @@ func (node *RaftNode)	saveToStorage() {
 
 	var logBuffer bytes.Buffer
 	if err := gob.NewEncoder(&logBuffer).Encode(node.logs); err != nil {
-		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
 		return
 	}
 
@@ -526,12 +526,12 @@ func (node *RaftNode)	saveToStorage() {
 }
 
 // todo
-func (node *RaftNode)	restoreFromStorage() {
+func (node *RaftNode) restoreFromStorage() {
 	if buffer := node.storage.Get(StorageTermKey); buffer != nil {
 		data := gob.NewDecoder(bytes.NewBuffer(buffer))
 		var term uint64 = 0
 		if err := data.Decode(&term); err == nil {
-			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
 		} else {
 			node.setTerm(term)
 		}
@@ -540,7 +540,7 @@ func (node *RaftNode)	restoreFromStorage() {
 	if buffer := node.storage.Get(StorageLogKey); buffer != nil {
 		data := gob.NewDecoder(bytes.NewBuffer(buffer))
 		if err := data.Decode(&node.logs); err != nil {
-			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog() + "err : ", err)
+			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
 		}
 	}
 }
@@ -555,7 +555,7 @@ func (node *RaftNode) ApplyEntry(command []byte) bool {
 
 	node.logs = append(node.logs, &message.LogEntry{
 		Term: node.currentTerm(),
-		Log: command,
+		Log:  command,
 	})
 	return true
 }

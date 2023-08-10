@@ -29,8 +29,8 @@ import (
 )
 
 type RaftPeerNode struct {
-	id      int
-	address string
+	id        int
+	address   string
 	requestor Requestor
 }
 

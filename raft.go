@@ -31,9 +31,9 @@ import (
 )
 
 type RaftService struct {
-	node    *RaftNode
+	node        *RaftNode
 	transporter Transporter
-	testBlock chan bool
+	testBlock   chan bool
 }
 
 func NewRaftService(id int, address string) *RaftService {
@@ -45,9 +45,9 @@ func NewRaftService(id int, address string) *RaftService {
 
 	node := NewRaftNode(NodeInfo{Id: id, Address: address})
 	service := &RaftService{
-		node:      node,
+		node:        node,
 		transporter: nil,
-		testBlock: make(chan bool),
+		testBlock:   make(chan bool),
 	}
 	return service
 }
@@ -57,12 +57,12 @@ func (service *RaftService) Node() *RaftNode {
 }
 
 func (service *RaftService) RegistTrasnporter(transporter Transporter) {
-	service.transporter = transporter;
+	service.transporter = transporter
 	transporter.RegistHandler(service.node)
 }
 
 func (service *RaftService) Run() {
-	err := service.transporter.Serve(service.node.info.Address);
+	err := service.transporter.Serve(service.node.info.Address)
 	if err != nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (service *RaftService) ConnectToPeers(peers map[int]string) {
 	for peerId, peerAddress := range peers {
 		peerNode, err := service.transporter.ConnectToPeer(
 			&message.RegistPeer{
-				Id: int32(peerId),
+				Id:      int32(peerId),
 				Address: peerAddress,
 			})
 		if err != nil {
@@ -105,4 +105,3 @@ func (service *RaftService) ApplyEntries(entris [][]byte) {
 func (service *RaftService) Stop() {
 	service.transporter.Stop()
 }
-

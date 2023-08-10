@@ -39,7 +39,7 @@ const (
 )
 
 type RpcRequestor struct {
-	client  *rpc.Client
+	client *rpc.Client
 }
 
 func (resquestor *RpcRequestor) RegistPeerNode(arg *message.RegistPeer, reply *bool) error {
@@ -63,11 +63,11 @@ func (resquestor *RpcRequestor) AppendEntries(arg *message.AppendEntries, reply 
 type RpcTransporter struct {
 	listener  net.Listener
 	rpcServer *rpc.Server
-	handler Responsor
+	handler   Responsor
 
 	peers map[int]*message.RegistPeer
 
-	running bool
+	running   bool
 	quitSinal chan interface{}
 
 	mutex sync.Mutex
@@ -77,8 +77,8 @@ type RpcTransporter struct {
 func NewRpcTransporter() *RpcTransporter {
 	transporter := &RpcTransporter{
 		rpcServer: rpc.NewServer(),
-		peers: map[int]*message.RegistPeer{},
-		running: false,
+		peers:     map[int]*message.RegistPeer{},
+		running:   false,
 	}
 	return transporter
 }
@@ -153,9 +153,9 @@ func (rpcTransporter *RpcTransporter) ConnectToPeer(peerInfo *message.RegistPeer
 
 	// regist peer
 	peerNode := &RaftPeerNode{
-		id:      		int(peerInfo.GetId()),
-		address: 		peerInfo.Address,
-		requestor:  &RpcRequestor{client},
+		id:        int(peerInfo.GetId()),
+		address:   peerInfo.Address,
+		requestor: &RpcRequestor{client},
 	}
 
 	rpcTransporter.peers[peerId] = peerInfo
