@@ -1,5 +1,8 @@
 # raft
-implement [raft](https://raft.github.io)
+implement [Raft Consensus protocol](https://raft.github.io)
+
+# Design
+![arch](./doc/arch.png)
 
 # Example
 
