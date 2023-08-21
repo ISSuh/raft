@@ -30,6 +30,7 @@ type Responsor interface {
 	onConnectToPeer(peer *RaftPeerNode)
 	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
 	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
+	onApplyEntry(args *message.ApplyEntry)
 }
 
 type Requestor interface {

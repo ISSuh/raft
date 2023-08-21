@@ -30,6 +30,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type EntryHandler interface {
+	EntryUpdated(log []byte)
+}
+
+type TestEntryHandler struct {
+}
+
+func (t *TestEntryHandler) EntryUpdated(log []byte) {
+	logrus.WithField("TEST", "TestEntryHandler.EntryUpdated").Info(goidForlog()+"log : ", log)
+}
+
 type RaftService struct {
 	node        *RaftNode
 	transporter Transporter
@@ -59,6 +70,10 @@ func (service *RaftService) Node() *RaftNode {
 func (service *RaftService) RegistTrasnporter(transporter Transporter) {
 	service.transporter = transporter
 	transporter.RegistHandler(service.node)
+}
+
+func (service *RaftService) RegistEntryHandler(handler EntryHandler) {
+	service.node.registEntryHandler(handler)
 }
 
 func (service *RaftService) Run() {

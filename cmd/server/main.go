@@ -119,6 +119,7 @@ func main() {
 
 	service := raft.NewRaftService(id, address)
 	service.RegistTrasnporter(raft.NewRpcTransporter())
+	service.RegistEntryHandler(&raft.TestEntryHandler{})
 
 	service.Run()
 

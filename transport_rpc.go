@@ -196,3 +196,14 @@ func (rpcTransporter *RpcTransporter) AppendEntries(args *message.AppendEntries,
 	rpcTransporter.handler.onAppendEntries(args, reply)
 	return nil
 }
+
+func (rpcTransporter *RpcTransporter) ApplyEntry(args *message.ApplyEntry, reply *bool) error {
+	log.WithField("RpcTransporter", "transporter.ApplyEntry").Info(goidForlog())
+	if rpcTransporter.handler == nil {
+		return errors.New("invalid handler")
+	}
+	rpcTransporter.handler.onApplyEntry(args)
+
+	*reply = true
+	return nil
+}

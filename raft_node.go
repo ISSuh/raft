@@ -77,6 +77,8 @@ type RaftNode struct {
 	appendEntriesSignal      chan *message.AppendEntries
 	appendEntriesReplySignal chan *message.AppendEntriesReply
 
+	entryHandler EntryHandler
+
 	peerMutex sync.Mutex
 	logMutex  sync.Mutex
 	workGroup sync.WaitGroup
@@ -103,6 +105,10 @@ func NewRaftNode(nodeInfo NodeInfo) *RaftNode {
 		appendEntriesSignal:      make(chan *message.AppendEntries, 512),
 		appendEntriesReplySignal: make(chan *message.AppendEntriesReply, 512),
 	}
+}
+
+func (node *RaftNode) registEntryHandler(handler EntryHandler) {
+	node.entryHandler = handler
 }
 
 func (node *RaftNode) Run() {
@@ -287,6 +293,10 @@ func (node *RaftNode) onAppendEntries(args *message.AppendEntries, reply *messag
 	reply = <-node.appendEntriesReplySignal
 }
 
+func (node *RaftNode) onApplyEntry(args *message.ApplyEntry) {
+	node.ApplyEntry(args.Log)
+}
+
 func (node *RaftNode) doEraction() *chan *message.RequestVoteReply {
 	log.WithField("node", "node.doEraction").Info(goidForlog()+"do erection. tern :  ", node.currentTerm())
 	responses := make(chan *message.RequestVoteReply, len(node.peers))
@@ -456,6 +466,7 @@ func (node *RaftNode) handleOnAppendEntries(arg *message.AppendEntries) {
 	if arg.LeaderCommitIndex > node.commitIndex {
 		logIndex := int64(len(node.logs) - 1)
 		node.commitIndex = Min(arg.LeaderCommitIndex, logIndex)
+
 		// commit log
 		node.saveToStorage()
 	}
@@ -505,12 +516,14 @@ func (node *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevlogInde
 }
 
 func (node *RaftNode) saveToStorage() {
+	log.WithField("node", "node.saveToStorage").Info(goidForlog())
+
 	node.logMutex.Lock()
 	defer node.logMutex.Unlock()
 
 	var termBuffer bytes.Buffer
 	if err := gob.NewEncoder(&termBuffer).Encode(node.currentTerm()); err != nil {
-		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
+		log.WithField("node", "node.saveToStorage").Fatal(goidForlog()+"err : ", err)
 		return
 	}
 
@@ -518,11 +531,21 @@ func (node *RaftNode) saveToStorage() {
 
 	var logBuffer bytes.Buffer
 	if err := gob.NewEncoder(&logBuffer).Encode(node.logs); err != nil {
-		log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
+		log.WithField("node", "node.saveToStorage").Fatal(goidForlog()+"err : ", err)
 		return
 	}
 
 	node.storage.Set(StorageLogKey, logBuffer.Bytes())
+
+	// run entry updated callback
+	// need redesign
+	go func() {
+		node.logMutex.Lock()
+		defer node.logMutex.Unlock()
+
+		lastEntry := node.logs[len(node.logs)-1]
+		node.entryHandler.EntryUpdated(lastEntry.Log)
+	}()
 }
 
 // todo
@@ -531,7 +554,7 @@ func (node *RaftNode) restoreFromStorage() {
 		data := gob.NewDecoder(bytes.NewBuffer(buffer))
 		var term uint64 = 0
 		if err := data.Decode(&term); err == nil {
-			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
+			log.WithField("node", "node.restoreFromStorage").Fatal(goidForlog()+"err : ", err)
 		} else {
 			node.setTerm(term)
 		}
@@ -540,7 +563,7 @@ func (node *RaftNode) restoreFromStorage() {
 	if buffer := node.storage.Get(StorageLogKey); buffer != nil {
 		data := gob.NewDecoder(bytes.NewBuffer(buffer))
 		if err := data.Decode(&node.logs); err != nil {
-			log.WithField("node", "node.handleOnRequestVote").Fatal(goidForlog()+"err : ", err)
+			log.WithField("node", "node.restoreFromStorage").Fatal(goidForlog()+"err : ", err)
 		}
 	}
 }
