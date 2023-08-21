@@ -256,7 +256,7 @@ func (node *RaftNode) removePeer(id int) {
 	}
 }
 
-func (node *RaftNode) onRegistPeerNode(peer *RaftPeerNode) {
+func (node *RaftNode) onConnectToPeer(peer *RaftPeerNode) {
 	node.addPeer(peer.id, peer)
 
 	myInfo := message.RegistPeer{
@@ -266,7 +266,7 @@ func (node *RaftNode) onRegistPeerNode(peer *RaftPeerNode) {
 
 	// notify peer for regist me
 	var reply bool
-	err := peer.RegistPeerNode(&myInfo, &reply)
+	err := peer.ConnectToPeer(&myInfo, &reply)
 	if err != nil || !reply {
 		log.WithField("node", "node.onRegistPeerNode").Error(goidForlog()+"err : ", err)
 		return

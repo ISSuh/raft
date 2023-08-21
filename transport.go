@@ -27,20 +27,20 @@ package raft
 import "github.com/ISSuh/raft/message"
 
 type Responsor interface {
-	onRegistPeerNode(peer *RaftPeerNode)
+	onConnectToPeer(peer *RaftPeerNode)
 	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
 	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
 }
 
 type Requestor interface {
-	RegistPeerNode(arg *message.RegistPeer, reply *bool) error
+	ConnectToPeer(arg *message.RegistPeer, reply *bool) error
 	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
 	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
 }
 
 type Transporter interface {
 	RegistHandler(handler Responsor)
-	ConnectToPeer(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
+	RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
 	Serve(address string) error
 	Stop()
 }

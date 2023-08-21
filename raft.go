@@ -77,7 +77,7 @@ func (service *RaftService) ConnectToPeers(peers map[int]string) {
 	}
 
 	for peerId, peerAddress := range peers {
-		peerNode, err := service.transporter.ConnectToPeer(
+		peerNode, err := service.transporter.RegistPeerNode(
 			&message.RegistPeer{
 				Id:      int32(peerId),
 				Address: peerAddress,
@@ -89,7 +89,7 @@ func (service *RaftService) ConnectToPeers(peers map[int]string) {
 		service.node.addPeer(peerNode.id, peerNode)
 
 		var reply bool
-		err = peerNode.RegistPeerNode(&myInfo, &reply)
+		err = peerNode.ConnectToPeer(&myInfo, &reply)
 		if err != nil || !reply {
 			logrus.WithField("network", "service.Run").Error(goidForlog()+"err : ", err)
 		}

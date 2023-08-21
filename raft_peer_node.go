@@ -34,8 +34,8 @@ type RaftPeerNode struct {
 	requestor Requestor
 }
 
-func (peer *RaftPeerNode) RegistPeerNode(arg *message.RegistPeer, reply *bool) error {
-	return peer.requestor.RegistPeerNode(arg, reply)
+func (peer *RaftPeerNode) ConnectToPeer(arg *message.RegistPeer, reply *bool) error {
+	return peer.requestor.ConnectToPeer(arg, reply)
 }
 
 func (peer *RaftPeerNode) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {

@@ -42,9 +42,9 @@ type RpcRequestor struct {
 	client *rpc.Client
 }
 
-func (resquestor *RpcRequestor) RegistPeerNode(arg *message.RegistPeer, reply *bool) error {
-	log.WithField("RpcTransporter", "RaftPeerNode.RegistPeerNode").Info(goidForlog())
-	method := "Raft.RegistPeerNode"
+func (resquestor *RpcRequestor) ConnectToPeer(arg *message.RegistPeer, reply *bool) error {
+	log.WithField("RpcTransporter", "RaftPeerNode.ConnectToPeer").Info(goidForlog())
+	method := "Raft.ConnectToPeer"
 	return resquestor.client.Call(method, arg, reply)
 }
 
@@ -128,17 +128,17 @@ func (rpcTransporter *RpcTransporter) Serve(address string) error {
 	return nil
 }
 
-func (rpcTransporter *RpcTransporter) ConnectToPeer(peerInfo *message.RegistPeer) (*RaftPeerNode, error) {
-	log.WithField("RpcTransporter", "transporter.ConnectToPeer").Info(goidForlog()+"peer : ", peerInfo.String())
+func (rpcTransporter *RpcTransporter) RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error) {
+	log.WithField("RpcTransporter", "transporter.RegistPeerNode").Info(goidForlog()+"peer : ", peerInfo.String())
 	peerId := int(peerInfo.GetId())
 	addr, err := net.ResolveTCPAddr("tcp", peerInfo.Address)
 	if err != nil {
-		log.WithField("RpcTransporter", "transporter.ConnectToPeer").Error(goidForlog()+"err : ", err)
+		log.WithField("RpcTransporter", "transporter.RegistPeerNode").Error(goidForlog()+"err : ", err)
 		return nil, err
 	}
 
 	if _, exist := rpcTransporter.peers[peerId]; exist {
-		log.WithField("RpcTransporter", "transporter.ConnectToPeer").Warn(goidForlog()+"alread registed. ", peerId)
+		log.WithField("RpcTransporter", "transporter.RegistPeerNode").Warn(goidForlog()+"alread registed. ", peerId)
 		return nil, errors.New("already exsit peer node")
 	}
 
@@ -147,7 +147,7 @@ func (rpcTransporter *RpcTransporter) ConnectToPeer(peerInfo *message.RegistPeer
 	defer rpcTransporter.mutex.Unlock()
 	client, err := rpc.Dial(addr.Network(), addr.String())
 	if err != nil {
-		log.WithField("RpcTransporter", "transporter.ConnectToPeer").Error(goidForlog()+"err : ", err)
+		log.WithField("RpcTransporter", "transporter.RegistPeerNode").Error(goidForlog()+"err : ", err)
 		return nil, err
 	}
 
@@ -168,11 +168,11 @@ func (rpcTransporter *RpcTransporter) Stop() {
 	rpcTransporter.wg.Wait()
 }
 
-func (rpcTransporter *RpcTransporter) RegistPeerNode(args *message.RegistPeer, reply *bool) error {
-	log.WithField("RpcTransporter", "transporter.RegistPeerNode").Info(goidForlog())
-	peerNode, err := rpcTransporter.ConnectToPeer(args)
+func (rpcTransporter *RpcTransporter) ConnectToPeer(args *message.RegistPeer, reply *bool) error {
+	log.WithField("RpcTransporter", "transporter.ConnectToPeer").Info(goidForlog())
+	peerNode, err := rpcTransporter.RegistPeerNode(args)
 	if peerNode != nil {
-		rpcTransporter.handler.onRegistPeerNode(peerNode)
+		rpcTransporter.handler.onConnectToPeer(peerNode)
 	}
 
 	*reply = (err == nil)
