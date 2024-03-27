@@ -82,9 +82,11 @@ type RaftNode struct {
 	peerMutex sync.Mutex
 	logMutex  sync.Mutex
 	workGroup sync.WaitGroup
+
+	transporter Transporter
 }
 
-func NewRaftNode(nodeInfo NodeInfo) *RaftNode {
+func NewRaftNode(nodeInfo NodeInfo, transporter Transporter) *RaftNode {
 	return &RaftNode{
 		NodeState: NewNodeState(),
 		info:      nodeInfo,
@@ -104,6 +106,8 @@ func NewRaftNode(nodeInfo NodeInfo) *RaftNode {
 		requestVoteReplySignal:   make(chan *message.RequestVoteReply, 512),
 		appendEntriesSignal:      make(chan *message.AppendEntries, 512),
 		appendEntriesReplySignal: make(chan *message.AppendEntriesReply, 512),
+
+		transporter: transporter,
 	}
 }
 
@@ -260,6 +264,8 @@ func (node *RaftNode) removePeer(id int) {
 		delete(node.nextIndex, id)
 		delete(node.matchIndex, id)
 	}
+
+	node.transporter.RemovePeerNode(id)
 }
 
 func (node *RaftNode) onConnectToPeer(peer *RaftPeerNode) {
@@ -280,6 +286,12 @@ func (node *RaftNode) onConnectToPeer(peer *RaftPeerNode) {
 }
 
 func (node *RaftNode) onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply) {
+	if node.state != FOLLOWER {
+		reply.Term = node.term
+		reply.VoteGranted = false
+		return
+	}
+
 	node.peerMutex.Lock()
 	defer node.peerMutex.Unlock()
 	node.requestVoteSignal <- args
@@ -380,6 +392,7 @@ func (node *RaftNode) handleOnRequestVote(arg *message.RequestVote) {
 	}
 
 	respone.Term = node.currentTerm()
+	log.WithField("node", "node.handleOnRequestVote").Infof("%d / %d", node.currentTerm(), arg.Term)
 
 	node.requestVoteReplySignal <- &respone
 }

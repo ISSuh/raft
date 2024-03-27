@@ -162,6 +162,10 @@ func (rpcTransporter *RpcTransporter) RegistPeerNode(peerInfo *message.RegistPee
 	return peerNode, nil
 }
 
+func (rpcTransporter *RpcTransporter) RemovePeerNode(peerId int) {
+	delete(rpcTransporter.peers, peerId)
+}
+
 func (rpcTransporter *RpcTransporter) Stop() {
 	rpcTransporter.quitSinal <- true
 	rpcTransporter.running = false

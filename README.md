@@ -1,7 +1,9 @@
 # raft
+
 implement [Raft Consensus protocol](https://raft.github.io)
 
 # Design
+
 ![arch](./doc/arch.png)
 
 # Example
@@ -49,6 +51,7 @@ service.Stop()
 ```
 
 #ToDo
-* unittest
-* redesign async handler(onRequestVote, onAppendEntries) like event queue when received request from peer node
-* implement log save & restore using persistence storage
+
+- unittest
+- redesign async handler(onRequestVote, onAppendEntries) like event queue when received request from peer node
+- implement log save & restore using persistence storage

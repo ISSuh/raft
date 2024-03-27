@@ -42,6 +42,7 @@ type Requestor interface {
 type Transporter interface {
 	RegistHandler(handler Responsor)
 	RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
+	RemovePeerNode(peerId int)
 	Serve(address string) error
 	Stop()
 }

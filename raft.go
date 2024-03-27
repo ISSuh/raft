@@ -54,7 +54,8 @@ func NewRaftService(id int, address string) *RaftService {
 		TimestampFormat: "[2006:01:02 15:04:05.000]",
 	})
 
-	node := NewRaftNode(NodeInfo{Id: id, Address: address})
+	t := NewRpcTransporter()
+	node := NewRaftNode(NodeInfo{Id: id, Address: address}, t)
 	service := &RaftService{
 		node:        node,
 		transporter: nil,
@@ -69,6 +70,7 @@ func (service *RaftService) Node() *RaftNode {
 
 func (service *RaftService) RegistTrasnporter(transporter Transporter) {
 	service.transporter = transporter
+	service.node.transporter = transporter
 	transporter.RegistHandler(service.node)
 }
 
