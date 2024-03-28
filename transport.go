@@ -24,7 +24,11 @@ SOFTWARE.
 
 package raft
 
-import "github.com/ISSuh/raft/message"
+import (
+	"context"
+
+	"github.com/ISSuh/raft/message"
+)
 
 type Responsor interface {
 	onConnectToPeer(peer *RaftPeerNode)
@@ -43,6 +47,6 @@ type Transporter interface {
 	RegistHandler(handler Responsor)
 	RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
 	RemovePeerNode(peerId int)
-	Serve(address string) error
+	Serve(context context.Context, address string) error
 	Stop()
 }

@@ -25,9 +25,10 @@ SOFTWARE.
 package raft
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/ISSuh/raft/message"
-	nested "github.com/antonfisher/nested-logrus-formatter"
-	"github.com/sirupsen/logrus"
 )
 
 type EntryHandler interface {
@@ -38,63 +39,67 @@ type TestEntryHandler struct {
 }
 
 func (t *TestEntryHandler) EntryUpdated(log []byte) {
-	logrus.WithField("TEST", "TestEntryHandler.EntryUpdated").Info(goidForlog()+"log : ", log)
+	fmt.Printf("[TEST] log : %s\n", string(log))
 }
 
 type RaftService struct {
+	config      Config
 	node        *RaftNode
 	transporter Transporter
+	context     context.Context
 	testBlock   chan bool
 }
 
-func NewRaftService(id int, address string) *RaftService {
-	logrus.SetFormatter(&nested.Formatter{
-		HideKeys:        true,
-		FieldsOrder:     []string{"network", "node", "peernode"},
-		TimestampFormat: "[2006:01:02 15:04:05.000]",
-	})
+func NewRaftService(config Config) *RaftService {
+	address := config.Raft.Server.Address.Ip + ":" + config.Raft.Server.Address.Port
+	nodeInfo := NodeInfo{
+		Id:      config.Raft.Server.Id,
+		Address: address,
+	}
 
 	t := NewRpcTransporter()
-	node := NewRaftNode(NodeInfo{Id: id, Address: address}, t)
-	service := &RaftService{
-		node:        node,
-		transporter: nil,
+	n := NewRaftNode(nodeInfo, t)
+	t.RegistHandler(n)
+
+	s := &RaftService{
+		config:      config,
+		node:        n,
+		transporter: t,
 		testBlock:   make(chan bool),
 	}
-	return service
+	return s
 }
 
-func (service *RaftService) Node() *RaftNode {
-	return service.node
+func (s *RaftService) Node() *RaftNode {
+	return s.node
 }
 
-func (service *RaftService) RegistTrasnporter(transporter Transporter) {
-	service.transporter = transporter
-	service.node.transporter = transporter
-	transporter.RegistHandler(service.node)
+func (s *RaftService) RegistEntryHandler(handler EntryHandler) {
+	s.node.registEntryHandler(handler)
 }
 
-func (service *RaftService) RegistEntryHandler(handler EntryHandler) {
-	service.node.registEntryHandler(handler)
-}
+func (s *RaftService) Run(c context.Context) {
+	s.context = c
 
-func (service *RaftService) Run() {
-	err := service.transporter.Serve(service.node.info.Address)
+	err := s.transporter.Serve(s.context, s.node.info.Address)
 	if err != nil {
 		return
 	}
-
-	service.node.Run()
+	s.node.Run(s.context)
 }
 
-func (service *RaftService) ConnectToPeers(peers map[int]string) {
+func (s *RaftService) Stop() {
+	s.transporter.Stop()
+}
+
+func (s *RaftService) ConnectToPeers(peers map[int]string) error {
 	myInfo := message.RegistPeer{
-		Id:      int32(service.node.info.Id),
-		Address: service.node.info.Address,
+		Id:      int32(s.node.info.Id),
+		Address: s.node.info.Address,
 	}
 
 	for peerId, peerAddress := range peers {
-		peerNode, err := service.transporter.RegistPeerNode(
+		peerNode, err := s.transporter.RegistPeerNode(
 			&message.RegistPeer{
 				Id:      int32(peerId),
 				Address: peerAddress,
@@ -103,22 +108,18 @@ func (service *RaftService) ConnectToPeers(peers map[int]string) {
 			continue
 		}
 
-		service.node.addPeer(peerNode.id, peerNode)
+		s.node.addPeer(peerNode.id, peerNode)
 
 		var reply bool
 		err = peerNode.ConnectToPeer(&myInfo, &reply)
 		if err != nil || !reply {
-			logrus.WithField("network", "service.Run").Error(goidForlog()+"err : ", err)
+			return err
 		}
 	}
 }
 
-func (service *RaftService) ApplyEntries(entris [][]byte) {
+func (s *RaftService) ApplyEntries(entris [][]byte) {
 	for _, entry := range entris {
-		service.node.ApplyEntry(entry)
+		s.node.ApplyEntry(entry)
 	}
-}
-
-func (service *RaftService) Stop() {
-	service.transporter.Stop()
 }

@@ -26,6 +26,7 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"sync"
 	"time"
@@ -44,6 +45,20 @@ const (
 	StorageTermKey = "term"
 	StorageLogKey  = "log"
 )
+
+type EventType int
+
+const (
+	ConnectPeer EventType = iota
+	ReqeustVote
+	VoteTimeout
+	CandidateTimeout
+	AppendEntries
+)
+
+type Event struct {
+	Type EventType
+}
 
 type NodeInfo struct {
 	Id      int
@@ -115,12 +130,12 @@ func (node *RaftNode) registEntryHandler(handler EntryHandler) {
 	node.entryHandler = handler
 }
 
-func (node *RaftNode) Run() {
+func (node *RaftNode) Run(c context.Context) {
 	node.workGroup.Add(1)
-	go func() {
+	go func(c context.Context) {
 		defer node.workGroup.Done()
-		node.loop()
-	}()
+		node.loop(c)
+	}(c)
 }
 
 func (node *RaftNode) Stop() {
@@ -130,20 +145,26 @@ func (node *RaftNode) Stop() {
 	node.workGroup.Wait()
 }
 
-func (node *RaftNode) loop() {
+func (node *RaftNode) loop(c context.Context) {
 	log.WithField("node", "node.loop").Info(goidForlog() + "run loop")
 
 	state := node.currentState()
 	for state != STOP {
-		switch state {
-		case FOLLOWER:
-			node.follwerWork()
-		case CANDIDATE:
-			node.candidateWork()
-		case LEADER:
-			node.leaderWork()
+		select {
+		case <-c.Done():
+			return
+		default:
+			switch state {
+			case FOLLOWER:
+				node.follwerWork()
+			case CANDIDATE:
+				node.candidateWork()
+			case LEADER:
+				node.leaderWork()
+			}
+			state = node.currentState()
 		}
-		state = node.currentState()
+
 	}
 
 	log.WithField("node", "node.loop").Info(goidForlog() + "loop end")

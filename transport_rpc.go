@@ -25,7 +25,9 @@ SOFTWARE.
 package raft
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -87,7 +89,7 @@ func (rpcTransporter *RpcTransporter) RegistHandler(handler Responsor) {
 	rpcTransporter.handler = handler
 }
 
-func (rpcTransporter *RpcTransporter) Serve(address string) error {
+func (rpcTransporter *RpcTransporter) Serve(c context.Context, address string) error {
 	err := rpcTransporter.rpcServer.RegisterName(RpcServerName, rpcTransporter)
 	if err != nil {
 		return err
@@ -110,6 +112,9 @@ func (rpcTransporter *RpcTransporter) Serve(address string) error {
 			if err != nil {
 				select {
 				case <-rpcTransporter.quitSinal:
+					return
+				case <-c.Done():
+					fmt.Println("contex cancel")
 					return
 				default:
 					log.WithField("RpcTransporter", "transporter.Serve").Fatal(goidForlog()+"accept error:", err)
