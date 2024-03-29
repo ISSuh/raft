@@ -116,6 +116,7 @@ func (s *RaftService) ConnectToPeers(peers map[int]string) error {
 			return err
 		}
 	}
+	return nil
 }
 
 func (s *RaftService) ApplyEntries(entris [][]byte) {

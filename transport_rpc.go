@@ -85,33 +85,33 @@ func NewRpcTransporter() *RpcTransporter {
 	return transporter
 }
 
-func (rpcTransporter *RpcTransporter) RegistHandler(handler Responsor) {
-	rpcTransporter.handler = handler
+func (t *RpcTransporter) RegistHandler(handler Responsor) {
+	t.handler = handler
 }
 
-func (rpcTransporter *RpcTransporter) Serve(c context.Context, address string) error {
-	err := rpcTransporter.rpcServer.RegisterName(RpcServerName, rpcTransporter)
+func (t *RpcTransporter) Serve(c context.Context, address string) error {
+	err := t.rpcServer.RegisterName(RpcServerName, t)
 	if err != nil {
 		return err
 	}
 
-	rpcTransporter.listener, err = net.Listen("tcp", address)
+	t.listener, err = net.Listen("tcp", address)
 	if err != nil {
 		log.WithField("RpcTransporter", "transporter.Serve").Fatal(err)
 		return err
 	}
 
-	log.WithField("RpcTransporter", "transporter.Serve").Info(goidForlog()+"listening at ", rpcTransporter.listener.Addr())
+	log.WithField("RpcTransporter", "transporter.Serve").Info(goidForlog()+"listening at ", t.listener.Addr())
 
-	rpcTransporter.wg.Add(1)
+	t.wg.Add(1)
 	go func() {
-		defer rpcTransporter.wg.Done()
+		defer t.wg.Done()
 
 		for {
-			conn, err := rpcTransporter.listener.Accept()
+			conn, err := t.listener.Accept()
 			if err != nil {
 				select {
-				case <-rpcTransporter.quitSinal:
+				case <-t.quitSinal:
 					return
 				case <-c.Done():
 					fmt.Println("contex cancel")
@@ -123,17 +123,17 @@ func (rpcTransporter *RpcTransporter) Serve(c context.Context, address string) e
 			}
 
 			log.WithField("RpcTransporter", "transporter.Serve").Info(goidForlog()+"connected : ", conn.RemoteAddr().String())
-			rpcTransporter.wg.Add(1)
+			t.wg.Add(1)
 			go func() {
-				rpcTransporter.rpcServer.ServeConn(conn)
-				rpcTransporter.wg.Done()
+				t.rpcServer.ServeConn(conn)
+				t.wg.Done()
 			}()
 		}
 	}()
 	return nil
 }
 
-func (rpcTransporter *RpcTransporter) RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error) {
+func (t *RpcTransporter) RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error) {
 	log.WithField("RpcTransporter", "transporter.RegistPeerNode").Info(goidForlog()+"peer : ", peerInfo.String())
 	peerId := int(peerInfo.GetId())
 	addr, err := net.ResolveTCPAddr("tcp", peerInfo.Address)
@@ -142,14 +142,14 @@ func (rpcTransporter *RpcTransporter) RegistPeerNode(peerInfo *message.RegistPee
 		return nil, err
 	}
 
-	if _, exist := rpcTransporter.peers[peerId]; exist {
+	if _, exist := t.peers[peerId]; exist {
 		log.WithField("RpcTransporter", "transporter.RegistPeerNode").Warn(goidForlog()+"alread registed. ", peerId)
 		return nil, errors.New("already exsit peer node")
 	}
 
 	// connect rpc server
-	rpcTransporter.mutex.Lock()
-	defer rpcTransporter.mutex.Unlock()
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	client, err := rpc.Dial(addr.Network(), addr.String())
 	if err != nil {
 		log.WithField("RpcTransporter", "transporter.RegistPeerNode").Error(goidForlog()+"err : ", err)
@@ -163,55 +163,55 @@ func (rpcTransporter *RpcTransporter) RegistPeerNode(peerInfo *message.RegistPee
 		requestor: &RpcRequestor{client},
 	}
 
-	rpcTransporter.peers[peerId] = peerInfo
+	t.peers[peerId] = peerInfo
 	return peerNode, nil
 }
 
-func (rpcTransporter *RpcTransporter) RemovePeerNode(peerId int) {
-	delete(rpcTransporter.peers, peerId)
+func (t *RpcTransporter) RemovePeerNode(peerId int) {
+	delete(t.peers, peerId)
 }
 
-func (rpcTransporter *RpcTransporter) Stop() {
-	rpcTransporter.quitSinal <- true
-	rpcTransporter.running = false
-	rpcTransporter.wg.Wait()
+func (t *RpcTransporter) Stop() {
+	t.quitSinal <- true
+	t.running = false
+	t.wg.Wait()
 }
 
-func (rpcTransporter *RpcTransporter) ConnectToPeer(args *message.RegistPeer, reply *bool) error {
+func (t *RpcTransporter) ConnectToPeer(args *message.RegistPeer, reply *bool) error {
 	log.WithField("RpcTransporter", "transporter.ConnectToPeer").Info(goidForlog())
-	peerNode, err := rpcTransporter.RegistPeerNode(args)
+	peerNode, err := t.RegistPeerNode(args)
 	if peerNode != nil {
-		rpcTransporter.handler.onConnectToPeer(peerNode)
+		t.handler.onConnectToPeer(peerNode)
 	}
 
 	*reply = (err == nil)
 	return err
 }
 
-func (rpcTransporter *RpcTransporter) RequestVote(args *message.RequestVote, reply *message.RequestVoteReply) error {
+func (t *RpcTransporter) RequestVote(args *message.RequestVote, reply *message.RequestVoteReply) error {
 	log.WithField("RpcTransporter", "transporter.RequestVote").Info(goidForlog())
-	if rpcTransporter.handler == nil {
+	if t.handler == nil {
 		return errors.New("invalid handler")
 	}
-	rpcTransporter.handler.onRequestVote(args, reply)
+	t.handler.onRequestVote(args, reply)
 	return nil
 }
 
-func (rpcTransporter *RpcTransporter) AppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply) error {
+func (t *RpcTransporter) AppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply) error {
 	log.WithField("RpcTransporter", "transporter.AppendEntries").Info(goidForlog())
-	if rpcTransporter.handler == nil {
+	if t.handler == nil {
 		return errors.New("invalid handler")
 	}
-	rpcTransporter.handler.onAppendEntries(args, reply)
+	t.handler.onAppendEntries(args, reply)
 	return nil
 }
 
-func (rpcTransporter *RpcTransporter) ApplyEntry(args *message.ApplyEntry, reply *bool) error {
+func (t *RpcTransporter) ApplyEntry(args *message.ApplyEntry, reply *bool) error {
 	log.WithField("RpcTransporter", "transporter.ApplyEntry").Info(goidForlog())
-	if rpcTransporter.handler == nil {
+	if t.handler == nil {
 		return errors.New("invalid handler")
 	}
-	rpcTransporter.handler.onApplyEntry(args)
+	t.handler.onApplyEntry(args)
 
 	*reply = true
 	return nil
