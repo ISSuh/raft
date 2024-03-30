@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2023 ISSuh
+# Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,31 +22,57 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package event
 
 import (
-	"context"
-
-	"github.com/ISSuh/raft/message"
+	"fmt"
+	"time"
 )
 
-type Responsor interface {
-	onConnectToPeer(peer *RaftPeerNode)
-	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
-	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
-	onApplyEntry(args *message.ApplyEntry)
+type EventType int
+
+const (
+	ConnectPeer EventType = iota
+	ReqeustVote
+	Timeout
+	VoteTimeout
+	CandidateTimeout
+	AppendEntries
+)
+
+func (t EventType) String() string {
+	switch t {
+	case ConnectPeer:
+		return "ConnectPeer"
+	case ReqeustVote:
+		return "ReqeustVote"
+	case Timeout:
+		return "Timeout"
+	case VoteTimeout:
+		return "VoteTimeout"
+	case CandidateTimeout:
+		return "CandidateTimeout"
+	case AppendEntries:
+		return "AppendEntries"
+	}
+	return ""
 }
 
-type Requestor interface {
-	ConnectToPeer(arg *message.RegistPeer, reply *bool) error
-	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
-	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
+type Event struct {
+	Type        EventType
+	Message     interface{}
+	Timestamp   time.Time
+	EventResult chan<- interface{}
 }
 
-type Transporter interface {
-	RegistHandler(handler Responsor)
-	RegistPeerNode(peerInfo *message.RegistPeer) (*RaftPeerNode, error)
-	RemovePeerNode(peerId int)
-	Serve(context context.Context, address string) error
-	Stop()
+func NewEvent(eventType EventType, message interface{}) Event {
+	return Event{
+		Type:      eventType,
+		Message:   message,
+		Timestamp: time.Now(),
+	}
+}
+
+func (e Event) String() string {
+	return fmt.Sprintf("Event{Type:%s, Message:%+v, Timestamp:%s}", e.Type, e.Message, e.Timestamp)
 }

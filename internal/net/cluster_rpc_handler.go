@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2024 ISSuh
+# Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,18 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package net
 
-type Cluster struct {
+import "github.com/ISSuh/raft/internal/message"
+
+type ClusterRpcHandler struct {
 }
 
-func NewCluster() (*Cluster, error) {
-	return &Cluster{}, nil
-}
-
-type Node struct {
-}
-
-func NewRaftNode() (*Node, error) {
-	return &Node{}, nil
+func (h *ClusterRpcHandler) ConnectNode(args *message.NodeMetadata, reply []*message.NodeMetadata) error {
+	return nil
 }

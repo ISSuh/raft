@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2023 ISSuh
+Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,53 +22,53 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package cluster
 
 import (
 	"fmt"
-	"math/rand"
-	"runtime"
-	"strconv"
-	"strings"
-	"time"
+
+	"github.com/ISSuh/raft/internal/config"
+	"github.com/ISSuh/raft/internal/message"
 )
 
-func timer(min time.Duration, max time.Duration) <-chan time.Time {
-	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	target := min
-	duration := max - min
-	if duration > 0 {
-		target += time.Duration(rand.Int63n(int64(duration)))
-	}
-	return time.After(target)
+type NodeMap map[int]*message.NodeMetadata
+
+type RaftCluster struct {
+	config config.Config
+	nodes  NodeMap
 }
 
-func goid() int {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
-	id, err := strconv.Atoi(idField)
-	if err != nil {
-		panic(fmt.Sprintf("cannot get goroutine id: %v", err))
+func NewRaftCluster(config config.Config) *RaftCluster {
+	return &RaftCluster{
+		config: config,
 	}
-
-	return id
 }
 
-func goidForlog() string {
-	return "[" + strconv.Itoa(goid()) + "] "
+func (c *RaftCluster) AddNode(meta *message.NodeMetadata) error {
+	id := int(meta.Id)
+	_, exist := c.nodes[id]
+	if exist {
+		return fmt.Errorf("[%d] node alread exist.", meta.Id)
+	}
+
+	c.nodes[id] = meta
+	return nil
 }
 
-func Min(a, b int64) int64 {
-	if a >= b {
-		return b
+func (c *RaftCluster) RemoveNode(nodeId int) error {
+	_, exist := c.nodes[nodeId]
+	if !exist {
+		return fmt.Errorf("[%d] node not exist.", nodeId)
 	}
-	return a
+
+	delete(c.nodes, nodeId)
+	return nil
 }
 
-func Max(a, b int64) int64 {
-	if a >= b {
-		return a
+func (c *RaftCluster) FindNode(nodeId int) (*message.NodeMetadata, error) {
+	node, exist := c.nodes[nodeId]
+	if !exist {
+		return nil, fmt.Errorf("[%d] node not exist.", nodeId)
 	}
-	return b
+	return node, nil
 }

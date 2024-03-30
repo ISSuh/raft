@@ -22,18 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package node
 
-type Cluster struct {
-}
-
-func NewCluster() (*Cluster, error) {
-	return &Cluster{}, nil
-}
-
-type Node struct {
-}
-
-func NewRaftNode() (*Node, error) {
-	return &Node{}, nil
+type RaftNode struct {
 }

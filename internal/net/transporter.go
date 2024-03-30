@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2023 ISSuh
+Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,9 +22,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package net
 
-type Storage interface {
-	Set(key string, value []byte)
-	Get(key string) []byte
+import (
+	"context"
+
+	"github.com/ISSuh/raft/internal/message"
+)
+
+type Responsor interface {
+	onConnectToPeer(peer *message.NodeMetadata)
+	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
+	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
+	onApplyEntry(args *message.ApplyEntry)
+}
+
+type Requestor interface {
+	ConnectToPeer(arg *message.NodeMetadata, reply *bool) error
+	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
+	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
+}
+
+type NodeTransporter interface {
+	Serve(context context.Context) error
+	StopAndWait()
+}
+
+type ClusterHandler interface {
+	OnConnectNode(node *message.NodeMetadata) []*message.NodeMetadata
+}
+
+type ClusterTransporter interface {
+	RegistHandler(handler ClusterHandler)
+	Serve(context context.Context) error
+	StopAndWait()
 }

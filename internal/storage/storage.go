@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2023 ISSuh
+Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,27 +24,7 @@ SOFTWARE.
 
 package raft
 
-import "sync"
-
-type MapStorage struct {
-	engine map[string][]byte
-	mutex  sync.Mutex
-}
-
-func NewMapStorage() *MapStorage {
-	return &MapStorage{
-		engine: make(map[string][]byte),
-	}
-}
-
-func (storage *MapStorage) Set(key string, value []byte) {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-	storage.engine[key] = value
-}
-
-func (storage *MapStorage) Get(key string) []byte {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-	return storage.engine[key]
+type Storage interface {
+	Set(key string, value []byte)
+	Get(key string) []byte
 }

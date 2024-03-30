@@ -22,18 +22,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package node
 
-type Cluster struct {
+import (
+	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/net"
+)
+
+type RaftPeerNode struct {
+	id        int
+	address   string
+	requestor net.Requestor
 }
 
-func NewCluster() (*Cluster, error) {
-	return &Cluster{}, nil
+func (peer *RaftPeerNode) ConnectToPeer(arg *message.RegistPeer, reply *bool) error {
+	return peer.requestor.ConnectToPeer(arg, reply)
 }
 
-type Node struct {
+func (peer *RaftPeerNode) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
+	return peer.requestor.RequestVote(arg, reply)
 }
 
-func NewRaftNode() (*Node, error) {
-	return &Node{}, nil
+func (peer *RaftPeerNode) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
+	return peer.requestor.AppendEntries(arg, reply)
 }

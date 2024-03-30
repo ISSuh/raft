@@ -2,7 +2,18 @@ syntax = "proto3";
 
 package raft;
 
-option go_package = "github.com/ISSuh/raft/message";
+option go_package = "github.com/ISSuh/raft/internal/message";
+
+message Address {
+  string ip = 1;
+  int32 port = 2;  
+}
+
+message NodeMetadata {
+  int32 id = 1;
+  string group = 2;
+  Address address = 3;
+}
 
 message ApplyEntry {
 	bytes log = 1;
@@ -11,11 +22,6 @@ message ApplyEntry {
 message LogEntry {
   uint64 term = 1;
 	optional bytes log = 3;
-}
-
-message RegistPeer {
-  int32 id = 1;
-  string address = 2;
 }
 
 message RequestVote {

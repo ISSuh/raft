@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2023 ISSuh
+Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,24 +24,27 @@ SOFTWARE.
 
 package raft
 
-import (
-	"github.com/ISSuh/raft/message"
-)
+import "sync"
 
-type RaftPeerNode struct {
-	id        int
-	address   string
-	requestor Requestor
+type MapStorage struct {
+	engine map[string][]byte
+	mutex  sync.Mutex
 }
 
-func (peer *RaftPeerNode) ConnectToPeer(arg *message.RegistPeer, reply *bool) error {
-	return peer.requestor.ConnectToPeer(arg, reply)
+func NewMapStorage() *MapStorage {
+	return &MapStorage{
+		engine: make(map[string][]byte),
+	}
 }
 
-func (peer *RaftPeerNode) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
-	return peer.requestor.RequestVote(arg, reply)
+func (storage *MapStorage) Set(key string, value []byte) {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	storage.engine[key] = value
 }
 
-func (peer *RaftPeerNode) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
-	return peer.requestor.AppendEntries(arg, reply)
+func (storage *MapStorage) Get(key string) []byte {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	return storage.engine[key]
 }

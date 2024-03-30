@@ -22,18 +22,64 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package config
 
-type Cluster struct {
+import (
+	"errors"
+	"os"
+	"strconv"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Address struct {
+	Ip   string `yaml:"ip"`
+	Port int    `yaml:"port"`
 }
 
-func NewCluster() (*Cluster, error) {
-	return &Cluster{}, nil
+func (a Address) String() string {
+	portStr := strconv.Itoa(a.Port)
+	return a.Ip + ":" + portStr
 }
 
-type Node struct {
+type ClussterConfig struct {
+	Address Address `yaml:"address"`
 }
 
-func NewRaftNode() (*Node, error) {
-	return &Node{}, nil
+type ServerConfig struct {
+	Id      int     `yaml:"id"`
+	Address Address `yaml:"address"`
+}
+
+type RaftConfig struct {
+	Cluster ClussterConfig `yaml:"cluster"`
+	Server  ServerConfig   `yaml:"server"`
+}
+
+type Config struct {
+	Raft RaftConfig `yaml:"raft"`
+}
+
+func NewRaftConfig(path string) (*RaftConfig, error) {
+	if len(path) == 0 {
+		return nil, errors.New("can not found config file")
+	}
+
+	buffer, err := loadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	config := new(RaftConfig)
+	if err = yaml.Unmarshal(buffer, config); err != nil {
+		return nil, nil
+	}
+	return config, nil
+}
+
+func loadFile(path string) (buffer []byte, err error) {
+	if buffer, err = os.ReadFile(path); err != nil {
+		return nil, err
+	}
+	return buffer, nil
 }
