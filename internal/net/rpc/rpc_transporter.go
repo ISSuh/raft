@@ -22,18 +22,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package net
+package rpc
 
 import (
 	"context"
 	"fmt"
 	"net"
 	"net/rpc"
+	gorpc "net/rpc"
 	"strconv"
 	"sync"
 
 	"github.com/ISSuh/raft/internal/config"
-	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
 )
 
@@ -46,46 +46,28 @@ type RpcTransporter struct {
 	config     config.Config
 	listener   net.Listener
 	rpcServer  *rpc.Server
-	rpcHandler *RpcHandler
-
-	eventChannel chan event.Event
+	rpcHandler *NodeRpcHandler
 
 	quit chan bool
 	wg   sync.WaitGroup
 }
 
-func NewRpcTransporter(config config.Config, eventChannel chan event.Event) *RpcTransporter {
-	handler := NewRpcHandler(eventChannel)
-
-	transporter := &RpcTransporter{
-		config:       config,
-		rpcServer:    rpc.NewServer(),
-		rpcHandler:   handler,
-		eventChannel: eventChannel,
-		quit:         make(chan bool),
+func NewRpcTransporter(config config.Config, rpcServer *gorpc.Server) *RpcTransporter {
+	return &RpcTransporter{
+		config:    config,
+		rpcServer: rpcServer,
+		quit:      make(chan bool),
 	}
-	return transporter
 }
 
 func (t *RpcTransporter) Serve(context context.Context) error {
 	fmt.Printf("[RpcTransporter.Serve]\n")
-
-	err := t.connectCluster()
-	if err != nil {
-		return err
-	}
-
 	return t.serveRpcServer(context)
 }
 
 func (t *RpcTransporter) StopAndWait() {
 	t.quit <- true
 	t.wg.Wait()
-}
-
-func (t *RpcTransporter) connectCluster() error {
-	fmt.Printf("[RpcTransporter.connectCluster]\n")
-	return nil
 }
 
 func (t *RpcTransporter) serveRpcServer(context context.Context) error {

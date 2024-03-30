@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package net
+package rpc
 
 import (
 	"fmt"
@@ -32,32 +32,32 @@ import (
 	"github.com/ISSuh/raft/internal/message"
 )
 
-type RpcHandler struct {
-	eventChannel chan event.Event
+type NodeRpcHandler struct {
+	eventChannel chan<- event.Event
 }
 
-func NewRpcHandler(eventChannel chan event.Event) *RpcHandler {
-	return &RpcHandler{
+func NewNodeRpcHandler(eventChannel chan<- event.Event) *NodeRpcHandler {
+	return &NodeRpcHandler{
 		eventChannel: eventChannel,
 	}
 }
 
-func (h *RpcHandler) HelthCheck(args *bool, reply *bool) error {
+func (h *NodeRpcHandler) HelthCheck(args *bool, reply *bool) error {
 	*reply = true
 	return nil
 }
 
-func (h *RpcHandler) RequestVote(args *message.RequestVote, reply *message.RequestVoteReply) error {
-	fmt.Printf("[RpcHandler.RequestVote]\n")
+func (h *NodeRpcHandler) RequestVote(args *message.RequestVote, reply *message.RequestVoteReply) error {
+	fmt.Printf("[NodeRpcHandler.RequestVote]\n")
 
-	eventResult, err := h.sendEvent(event.ReqeustVote, args)
+	eventResult, err := h.notifyEvent(event.ReqeustVote, args)
 	if err != nil {
 		return err
 	}
 
 	result, ok := eventResult.(*message.RequestVoteReply)
 	if !ok {
-		return fmt.Errorf("[RpcHandler.RequestVote] invalid event response. %v\n", eventResult)
+		return fmt.Errorf("[NodeRpcHandler.RequestVote] invalid event response. %v\n", eventResult)
 	}
 
 	reply.Term = result.Term
@@ -65,17 +65,17 @@ func (h *RpcHandler) RequestVote(args *message.RequestVote, reply *message.Reque
 	return nil
 }
 
-func (h *RpcHandler) AppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply) error {
-	fmt.Printf("[RpcHandler.AppendEntries]\n")
+func (h *NodeRpcHandler) AppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply) error {
+	fmt.Printf("[NodeRpcHandler.AppendEntries]\n")
 
-	eventResult, err := h.sendEvent(event.AppendEntries, args)
+	eventResult, err := h.notifyEvent(event.AppendEntries, args)
 	if err != nil {
 		return err
 	}
 
 	result, ok := eventResult.(*message.AppendEntriesReply)
 	if !ok {
-		return fmt.Errorf("[RpcHandler.AppendEntries] invalid event response. %v\n", eventResult)
+		return fmt.Errorf("[NodeRpcHandler.AppendEntries] invalid event response. %v\n", eventResult)
 	}
 
 	reply.Term = result.Term
@@ -86,24 +86,24 @@ func (h *RpcHandler) AppendEntries(args *message.AppendEntries, reply *message.A
 	return nil
 }
 
-func (h *RpcHandler) ApplyEntry(args *message.ApplyEntry, reply *bool) error {
-	fmt.Printf("[RpcHandler.ApplyEntry]\n")
+func (h *NodeRpcHandler) ApplyEntry(args *message.ApplyEntry, reply *bool) error {
+	fmt.Printf("[NodeRpcHandler.ApplyEntry]\n")
 
-	eventResult, err := h.sendEvent(event.ReqeustVote, args)
+	eventResult, err := h.notifyEvent(event.ReqeustVote, args)
 	if err != nil {
 		return err
 	}
 
 	result, ok := eventResult.(*bool)
 	if !ok {
-		return fmt.Errorf("[RpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
+		return fmt.Errorf("[NodeRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
 	}
 
 	*reply = *result
 	return nil
 }
 
-func (h *RpcHandler) sendEvent(eventType event.EventType, message interface{}) (interface{}, error) {
+func (h *NodeRpcHandler) notifyEvent(eventType event.EventType, message interface{}) (interface{}, error) {
 	rsultChannel := make(chan interface{})
 	e := event.Event{
 		Type:        eventType,
@@ -119,6 +119,6 @@ func (h *RpcHandler) sendEvent(eventType event.EventType, message interface{}) (
 	case result := <-rsultChannel:
 		return result, nil
 	case <-timeoutChan:
-		return nil, fmt.Errorf("[RpcHandler.sendEvent] %s evnet timeout.", eventType)
+		return nil, fmt.Errorf("[NodeRpcHandler.notifyEvent] %s evnet timeout.", eventType)
 	}
 }

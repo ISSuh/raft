@@ -1,7 +1,7 @@
 /*
 MIT License
 
-# Copyright (c) 2024 ISSuh
+Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,13 +22,51 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package net
+package cluster
 
-import "github.com/ISSuh/raft/internal/message"
+import (
+	"fmt"
 
-type ClusterRpcHandler struct {
+	"github.com/ISSuh/raft/internal/message"
+)
+
+type nodeMap map[int]*message.NodeMetadata
+
+type nodeManager struct {
+	nodes nodeMap
 }
 
-func (h *ClusterRpcHandler) ConnectNode(args *message.NodeMetadata, reply []*message.NodeMetadata) error {
+func NewNodeManager() nodeManager {
+	return nodeManager{
+		nodes: make(nodeMap),
+	}
+}
+
+func (n *nodeManager) addNode(meta *message.NodeMetadata) error {
+	id := int(meta.Id)
+	_, exist := n.nodes[id]
+	if exist {
+		return fmt.Errorf("[%d] node alread exist.", meta.Id)
+	}
+
+	n.nodes[id] = meta
 	return nil
+}
+
+func (n *nodeManager) removeNode(nodeId int) error {
+	_, exist := n.nodes[nodeId]
+	if !exist {
+		return fmt.Errorf("[%d] node not exist.", nodeId)
+	}
+
+	delete(n.nodes, nodeId)
+	return nil
+}
+
+func (n *nodeManager) findNode(nodeId int) (*message.NodeMetadata, error) {
+	node, exist := n.nodes[nodeId]
+	if !exist {
+		return nil, fmt.Errorf("[%d] node not exist.", nodeId)
+	}
+	return node, nil
 }

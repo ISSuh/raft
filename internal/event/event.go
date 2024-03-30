@@ -32,12 +32,17 @@ import (
 type EventType int
 
 const (
+	// node  event
 	ConnectPeer EventType = iota
 	ReqeustVote
 	Timeout
 	VoteTimeout
 	CandidateTimeout
 	AppendEntries
+
+	// cluster event
+	ConnectNode
+	DeleteNode
 )
 
 func (t EventType) String() string {

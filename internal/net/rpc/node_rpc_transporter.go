@@ -22,47 +22,59 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package cluster
+package rpc
 
 import (
 	"context"
+	"fmt"
+	gorpc "net/rpc"
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/net"
-	"github.com/ISSuh/raft/internal/net/rpc"
 )
 
-type RaftCluster struct {
+type NodeRpcTransporter struct {
 	config      config.Config
-	manager     nodeManager
 	transporter net.Transporter
+	rpcHandler  *NodeRpcHandler
 
 	eventChannel chan event.Event
 }
 
-func NewRaftCluster(config config.Config) (*RaftCluster, error) {
-	eventChannel := make(chan event.Event)
-	transporter, err := rpc.NewClusterRpcTransporter(config, eventChannel)
+func NewNodeRpcTransporter(config config.Config, eventChannel chan event.Event) (*NodeRpcTransporter, error) {
+	rpcHandler := NewNodeRpcHandler(eventChannel)
+
+	rpcServer := gorpc.NewServer()
+	err := rpcServer.RegisterName(RpcServerName, rpcHandler)
 	if err != nil {
 		return nil, err
 	}
 
-	return &RaftCluster{
+	return &NodeRpcTransporter{
 		config:       config,
-		manager:      NewNodeManager(),
-		transporter:  transporter,
+		rpcHandler:   rpcHandler,
+		transporter:  NewRpcTransporter(config, rpcServer),
 		eventChannel: eventChannel,
 	}, nil
 }
 
-func (c *RaftCluster) Serve(context context.Context) error {
-	return c.transporter.Serve(context)
+func (t *NodeRpcTransporter) Serve(context context.Context) error {
+	fmt.Printf("[NodeRpcTransporter.Serve]\n")
+
+	err := t.connectCluster()
+	if err != nil {
+		return err
+	}
+
+	return t.transporter.Serve(context)
 }
 
-func (c *RaftCluster) Stop() {
-	c.transporter.StopAndWait()
+func (t *NodeRpcTransporter) StopAndWait() {
+	t.transporter.StopAndWait()
 }
 
-func (c *RaftCluster) eventLoop() {
+func (t *NodeRpcTransporter) connectCluster() error {
+	fmt.Printf("[NodeRpcTransporter.connectCluster]\n")
+	return nil
 }

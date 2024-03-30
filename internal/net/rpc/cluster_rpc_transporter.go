@@ -22,38 +22,48 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package net
+package rpc
 
 import (
-	"net/rpc"
+	"context"
+	"fmt"
+	gorpc "net/rpc"
 
-	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/config"
+	"github.com/ISSuh/raft/internal/event"
+	"github.com/ISSuh/raft/internal/net"
 )
 
-const (
-	RpcMethodHelthCheck    = "Raft.HelthCheck"
-	RpcMethodConnectToPeer = "Raft.ConnectToPeer"
-	RpcMethodRequestVote   = "Raft.RequestVote"
-	RpcMethodAppendEntries = "Raft.AppendEntries"
-)
+type ClusterRpcTransporter struct {
+	config      config.Config
+	transporter net.Transporter
+	rpcHandler  *ClusterRpcHandler
 
-type RpcRequestor struct {
-	client *rpc.Client
+	eventChannel chan event.Event
 }
 
-func (r *RpcRequestor) HelthCheck(reply *bool) error {
-	empty := false
-	return r.client.Call(RpcMethodHelthCheck, &empty, reply)
+func NewClusterRpcTransporter(config config.Config, eventChannel chan event.Event) (net.Transporter, error) {
+	rpcHandler := NewClusterRpcHandler(eventChannel)
+
+	rpcServer := gorpc.NewServer()
+	err := rpcServer.RegisterName(RpcServerName, rpcHandler)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ClusterRpcTransporter{
+		config:       config,
+		rpcHandler:   rpcHandler,
+		transporter:  NewRpcTransporter(config, rpcServer),
+		eventChannel: eventChannel,
+	}, nil
 }
 
-func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata, reply *bool) error {
-	return r.client.Call(RpcMethodConnectToPeer, arg, reply)
+func (t *ClusterRpcTransporter) Serve(context context.Context) error {
+	fmt.Printf("[ClusterRpcTransporter.Serve]\n")
+	return t.transporter.Serve(context)
 }
 
-func (r *RpcRequestor) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
-	return r.client.Call(RpcMethodRequestVote, arg, reply)
-}
-
-func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
-	return r.client.Call(RpcMethodAppendEntries, arg, reply)
+func (t *ClusterRpcTransporter) StopAndWait() {
+	t.transporter.StopAndWait()
 }

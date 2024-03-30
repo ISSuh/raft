@@ -22,28 +22,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package net
+package rpc
 
 import (
-	"context"
+	"net/rpc"
 
 	"github.com/ISSuh/raft/internal/message"
 )
 
-type Responsor interface {
-	onConnectToPeer(peer *message.NodeMetadata)
-	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
-	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
-	onApplyEntry(args *message.ApplyEntry)
+const (
+	RpcMethodHelthCheck    = "Raft.HelthCheck"
+	RpcMethodConnectToPeer = "Raft.ConnectToPeer"
+	RpcMethodRequestVote   = "Raft.RequestVote"
+	RpcMethodAppendEntries = "Raft.AppendEntries"
+)
+
+type RpcRequestor struct {
+	client *rpc.Client
 }
 
-type Requestor interface {
-	ConnectToPeer(arg *message.NodeMetadata, reply *bool) error
-	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
-	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
+func (r *RpcRequestor) HelthCheck(reply *bool) error {
+	empty := false
+	return r.client.Call(RpcMethodHelthCheck, &empty, reply)
 }
 
-type Transporter interface {
-	Serve(context context.Context) error
-	StopAndWait()
+func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata, reply *bool) error {
+	return r.client.Call(RpcMethodConnectToPeer, arg, reply)
+}
+
+func (r *RpcRequestor) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
+	return r.client.Call(RpcMethodRequestVote, arg, reply)
+}
+
+func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
+	return r.client.Call(RpcMethodAppendEntries, arg, reply)
 }
