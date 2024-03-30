@@ -26,7 +26,6 @@ package rpc
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
@@ -50,7 +49,11 @@ func (h *ClusterRpcHandler) ConnectNode(args *message.NodeMetadata, reply *[]*me
 		return err
 	}
 
-	result, ok := eventResult.(*[]*message.NodeMetadata)
+	if eventResult.Err != nil {
+		return eventResult.Err
+	}
+
+	result, ok := eventResult.Result.(*[]*message.NodeMetadata)
 	if !ok {
 		return fmt.Errorf("[ClusterRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
 	}
@@ -67,7 +70,11 @@ func (h *ClusterRpcHandler) DeleteNode(args *message.NodeMetadata, reply *bool) 
 		return err
 	}
 
-	result, ok := eventResult.(*bool)
+	if eventResult.Err != nil {
+		return eventResult.Err
+	}
+
+	result, ok := eventResult.Result.(*bool)
 	if !ok {
 		return fmt.Errorf("[ClusterRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
 	}
@@ -76,22 +83,11 @@ func (h *ClusterRpcHandler) DeleteNode(args *message.NodeMetadata, reply *bool) 
 	return nil
 }
 
-func (h *ClusterRpcHandler) notifyEvent(eventType event.EventType, message interface{}) (interface{}, error) {
-	rsultChannel := make(chan interface{})
-	e := event.Event{
-		Type:        eventType,
-		Message:     message,
-		Timestamp:   time.Now(),
-		EventResult: rsultChannel,
+func (h *ClusterRpcHandler) notifyEvent(eventType event.EventType, message interface{}) (*event.EventResult, error) {
+	e := event.NewEvent(eventType, message)
+	result, err := e.Notify(h.eventChannel)
+	if err != nil {
+		return nil, err
 	}
-
-	h.eventChannel <- e
-
-	timeoutChan := time.After(1 * time.Second)
-	select {
-	case result := <-rsultChannel:
-		return result, nil
-	case <-timeoutChan:
-		return nil, fmt.Errorf("[ClusterRpcHandler.notifyEvent] %s evnet timeout.", eventType)
-	}
+	return result, nil
 }

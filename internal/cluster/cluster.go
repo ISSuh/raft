@@ -26,9 +26,11 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/event"
+	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 	"github.com/ISSuh/raft/internal/net/rpc"
 )
@@ -64,5 +66,35 @@ func (c *RaftCluster) Stop() {
 	c.transporter.StopAndWait()
 }
 
-func (c *RaftCluster) eventLoop() {
+func (c *RaftCluster) eventLoop(context context.Context) {
+	for {
+		select {
+		case <-context.Done():
+			fmt.Printf("[RaftCluster.eventLoog] context canceled")
+			return
+		case e := <-c.eventChannel:
+			if err := c.processEvent(e); err != nil {
+				fmt.Printf("[RaftCluster.eventLoog] err  %s", err.Error())
+			}
+		}
+	}
+}
+
+func (c *RaftCluster) processEvent(e event.Event) error {
+	var err error
+	switch e.Type {
+	case event.ConnectNode:
+
+	case event.DeleteNode:
+	}
+}
+
+func (c *RaftCluster) onConnectNode(e event.Event) ([]*message.NodeMetadata, error) {
+	return nil, nil
+}
+
+func (c *RaftCluster) onDeleteNode(e event.Event) error {
+
+	c.manager.
+	return nil
 }
