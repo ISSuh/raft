@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
-	gorpc "net/rpc"
 	"strconv"
 	"sync"
 
@@ -46,17 +45,18 @@ type RpcTransporter struct {
 	config     config.Config
 	listener   net.Listener
 	rpcServer  *rpc.Server
-	rpcHandler *NodeRpcHandler
+	rpcHandler RpcHandler
 
 	quit chan bool
 	wg   sync.WaitGroup
 }
 
-func NewRpcTransporter(config config.Config, rpcServer *gorpc.Server) *RpcTransporter {
+func NewRpcTransporter(config config.Config, handler RpcHandler) *RpcTransporter {
 	return &RpcTransporter{
-		config:    config,
-		rpcServer: rpcServer,
-		quit:      make(chan bool),
+		config:     config,
+		rpcServer:  rpc.NewServer(),
+		rpcHandler: handler,
+		quit:       make(chan bool),
 	}
 }
 
@@ -113,9 +113,6 @@ func (t *RpcTransporter) runServer(context context.Context) {
 			}()
 		}
 	}()
-
-	// TEST
-	t.wg.Wait()
 }
 
 func (t *RpcTransporter) ConnectPeerNode(node message.NodeMetadata) (*RpcRequestor, error) {

@@ -24,5 +24,19 @@ SOFTWARE.
 
 package rpc
 
-type RpcReply struct {
+import "github.com/ISSuh/raft/internal/event"
+
+type RpcRequest struct {
+	Id      uint32
+	Type    event.EventType
+	Message interface{}
+}
+
+type RpcResponse struct {
+	Id      uint32
+	Message interface{}
+}
+
+type RpcHandler interface {
+	Handle(req *RpcRequest, resp *RpcResponse) error
 }

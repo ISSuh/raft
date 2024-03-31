@@ -6,7 +6,7 @@ import (
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
-	"github.com/ISSuh/raft/internal/net"
+	"github.com/ISSuh/raft/internal/net/rpc"
 )
 
 func main() {
@@ -24,7 +24,8 @@ func main() {
 		},
 	}
 
-	t := net.NewRpcTransporter(config, eventChan)
+	h := rpc.NewNodeRpcHandler(eventChan)
+	t := rpc.NewRpcTransporter(config, h)
 
 	node := message.NodeMetadata{
 		Id: 1,
@@ -39,13 +40,12 @@ func main() {
 		return
 	}
 
-	result := false
-	if err := requestor.HelthCheck(&result); err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	// if err := requestor.HelthCheck(); err != nil {
+	// 	fmt.Println(err.Error())
+	// 	return
+	// }
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 5; i++ {
 		var args message.RequestVote
 		var reply message.RequestVoteReply
 		if err := requestor.RequestVote(&args, &reply); err != nil {

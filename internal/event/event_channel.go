@@ -22,7 +22,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package rpc
+package event
 
-type RpcArgument struct {
+type EventChannel struct {
+	c chan Event
+}
+
+func NewEventChannel() *EventChannel {
+	return &EventChannel{
+		c: make(chan Event),
+	}
+}
+
+func (e *EventChannel) Notify(event Event) (interface{}, error) {
+	return event.Notify(e.c)
 }

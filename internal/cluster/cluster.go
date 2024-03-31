@@ -45,7 +45,9 @@ type RaftCluster struct {
 
 func NewRaftCluster(config config.Config) (*RaftCluster, error) {
 	eventChannel := make(chan event.Event)
-	transporter, err := rpc.NewClusterRpcTransporter(config, eventChannel)
+	handler := rpc.NewClusterRpcHandler(eventChannel)
+
+	transporter, err := rpc.NewRpcTransporter(config, handler)
 	if err != nil {
 		return nil, err
 	}

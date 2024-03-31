@@ -25,12 +25,15 @@ SOFTWARE.
 package rpc
 
 import (
+	"math/rand"
 	"net/rpc"
 
+	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
 )
 
 const (
+	RpcMethodHandle        = "Raft.Handle"
 	RpcMethodHelthCheck    = "Raft.HelthCheck"
 	RpcMethodConnectToPeer = "Raft.ConnectToPeer"
 	RpcMethodRequestVote   = "Raft.RequestVote"
@@ -41,9 +44,15 @@ type RpcRequestor struct {
 	client *rpc.Client
 }
 
-func (r *RpcRequestor) HelthCheck(reply *bool) error {
-	empty := false
-	return r.client.Call(RpcMethodHelthCheck, &empty, reply)
+func (r *RpcRequestor) HelthCheck() error {
+	req := RpcRequest{
+		Id:      rand.Uint32(),
+		Type:    event.HealthCheck,
+		Message: false,
+	}
+
+	resp := RpcResponse{}
+	return r.client.Call(RpcMethodHandle, &req, &resp)
 }
 
 func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata, reply *bool) error {
@@ -51,7 +60,14 @@ func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata, reply *bool) err
 }
 
 func (r *RpcRequestor) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
-	return r.client.Call(RpcMethodRequestVote, arg, reply)
+	req := RpcRequest{
+		Id:      rand.Uint32(),
+		Type:    event.HealthCheck,
+		Message: arg,
+	}
+
+	resp := RpcResponse{}
+	return r.client.Call(RpcMethodHandle, &req, &resp)
 }
 
 func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {

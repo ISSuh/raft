@@ -6,7 +6,7 @@ import (
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/event"
-	"github.com/ISSuh/raft/internal/net"
+	"github.com/ISSuh/raft/internal/net/rpc"
 )
 
 func main() {
@@ -24,7 +24,8 @@ func main() {
 		},
 	}
 
-	t := net.NewRpcTransporter(config, eventChan)
+	h := rpc.NewNodeRpcHandler(eventChan)
+	t := rpc.NewRpcTransporter(config, h)
 
 	q := make(chan interface{})
 	go func(eventChan <-chan event.Event, q <-chan interface{}) {
@@ -34,7 +35,10 @@ func main() {
 				return
 			case e := <-eventChan:
 				fmt.Printf("[TEST] event : %s\n", e)
-				e.EventResult <- true
+				e.EventResultChannel <- event.EventResult{
+					Err:    nil,
+					Result: true,
+				}
 			}
 
 		}

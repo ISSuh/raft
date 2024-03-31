@@ -39,6 +39,8 @@ const (
 	VoteTimeout
 	CandidateTimeout
 	AppendEntries
+	ApplyEntry
+	HealthCheck
 
 	// cluster event
 	ConnectNode
