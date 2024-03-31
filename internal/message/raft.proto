@@ -15,6 +15,10 @@ message NodeMetadata {
   Address address = 3;
 }
 
+message NodeMetadataesList {
+  repeated NodeMetadata nodes = 1;
+}
+
 message ApplyEntry {
 	bytes log = 1;
 }

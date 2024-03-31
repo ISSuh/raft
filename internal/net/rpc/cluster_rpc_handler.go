@@ -29,10 +29,12 @@ import (
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/util"
+	"google.golang.org/protobuf/proto"
 )
 
 type ClusterRpcHandler struct {
-	eventChannel chan<- event.Event
+	eventChannel chan event.Event
 }
 
 func NewClusterRpcHandler(eventChannel chan event.Event) RpcHandler {
@@ -55,22 +57,28 @@ func (h *ClusterRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
 }
 
 func (h *ClusterRpcHandler) processConnectNodeEvent(req *RpcRequest, resp *RpcResponse) error {
-	node, ok := req.Message.(*message.NodeMetadata)
-	if !ok {
+	message := &message.NodeMetadata{}
+	err := proto.Unmarshal(req.Message, message)
+	if err != nil {
 		return fmt.Errorf("[ClusterRpcHandler.processConnectNodeEvent] invalid message. %v\n", req.Message)
 	}
 
-	peers, err := h.connectNode(node)
+	peers, err := h.connectNode(message)
+	if err != nil {
+		return err
+	}
+
+	resultMessage, err := proto.Marshal(peers)
 	if err != nil {
 		return err
 	}
 
 	resp.Id = req.Id
-	resp.Message = peers
+	resp.Message = resultMessage
 	return nil
 }
 
-func (h *ClusterRpcHandler) connectNode(node *message.NodeMetadata) ([]*message.NodeMetadata, error) {
+func (h *ClusterRpcHandler) connectNode(node *message.NodeMetadata) (*message.NodeMetadataesList, error) {
 	fmt.Printf("[ClusterRpcHandler.ApplyEntry]\n")
 
 	eventResult, err := h.notifyEvent(event.ConnectNode, node)
@@ -82,26 +90,27 @@ func (h *ClusterRpcHandler) connectNode(node *message.NodeMetadata) ([]*message.
 		return nil, eventResult.Err
 	}
 
-	result, ok := eventResult.Result.(*[]*message.NodeMetadata)
+	result, ok := eventResult.Result.(*message.NodeMetadataesList)
 	if !ok {
 		return nil, fmt.Errorf("[ClusterRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
 	}
-	return *result, nil
+	return result, nil
 }
 
 func (h *ClusterRpcHandler) processDeleteNodeEvent(req *RpcRequest, resp *RpcResponse) error {
-	node, ok := req.Message.(*message.NodeMetadata)
-	if !ok {
+	message := &message.NodeMetadata{}
+	err := proto.Unmarshal(req.Message, message)
+	if err != nil {
 		return fmt.Errorf("[ClusterRpcHandler.processDeleteNodeEvent] invalid message. %v\n", req.Message)
 	}
 
-	result, err := h.deleteNode(node)
+	success, err := h.deleteNode(message)
 	if err != nil {
 		return err
 	}
 
 	resp.Id = req.Id
-	resp.Message = result
+	resp.Message = []byte{util.BooleanToByte(success)}
 	return nil
 }
 

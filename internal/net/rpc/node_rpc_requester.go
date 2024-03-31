@@ -25,11 +25,14 @@ SOFTWARE.
 package rpc
 
 import (
+	"fmt"
 	"math/rand"
 	"net/rpc"
+	"strconv"
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -48,28 +51,98 @@ func (r *RpcRequestor) HelthCheck() error {
 	req := RpcRequest{
 		Id:      rand.Uint32(),
 		Type:    event.HealthCheck,
-		Message: false,
+		Message: []byte{},
 	}
 
 	resp := RpcResponse{}
 	return r.client.Call(RpcMethodHandle, &req, &resp)
 }
 
-func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata, reply *bool) error {
-	return r.client.Call(RpcMethodConnectToPeer, arg, reply)
+func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata) (bool, error) {
+	data, err := proto.Marshal(arg)
+	if err != nil {
+		return false, err
+	}
+
+	req, resp := r.makeRpcRequestResponse(event.ReqeustVote, data)
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		return false, err
+	}
+
+	if req.Id != resp.Id {
+		return false,
+			fmt.Errorf("[RpcRequestor.RequestVote] not matched request, respnse id. [request id = %d, response id = %d]",
+				req.Id, resp.Id,
+			)
+	}
+
+	reply, err := strconv.ParseBool(string(resp.Message))
+	if err != nil {
+		return false, err
+	}
+	return reply, nil
 }
 
-func (r *RpcRequestor) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
+func (r *RpcRequestor) RequestVote(arg *message.RequestVote) (*message.RequestVoteReply, error) {
+	data, err := proto.Marshal(arg)
+	if err != nil {
+		return nil, err
+	}
+
+	req, resp := r.makeRpcRequestResponse(event.ReqeustVote, data)
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		return nil, err
+	}
+
+	if req.Id != resp.Id {
+		return nil,
+			fmt.Errorf("[RpcRequestor.RequestVote] not matched request, respnse id. [request id = %d, response id = %d]",
+				req.Id, resp.Id,
+			)
+	}
+
+	reply := &message.RequestVoteReply{}
+	if err := proto.Unmarshal(resp.Message, reply); err != nil {
+		return nil, err
+	}
+	return reply, nil
+}
+
+func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries) (*message.AppendEntriesReply, error) {
+	data, err := proto.Marshal(arg)
+	if err != nil {
+		return nil, err
+	}
+
+	req, resp := r.makeRpcRequestResponse(event.ReqeustVote, data)
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		return nil, err
+	}
+
+	if req.Id != resp.Id {
+		return nil,
+			fmt.Errorf("[RpcRequestor.RequestVote] not matched request, respnse id. [request id = %d, response id = %d]",
+				req.Id, resp.Id,
+			)
+	}
+
+	reply := &message.AppendEntriesReply{}
+	if err := proto.Unmarshal(resp.Message, reply); err != nil {
+		return nil, err
+	}
+	return reply, nil
+}
+
+func (r *RpcRequestor) makeRpcRequestResponse(messageType event.EventType, message []byte) (RpcRequest, RpcResponse) {
 	req := RpcRequest{
 		Id:      rand.Uint32(),
-		Type:    event.HealthCheck,
-		Message: arg,
+		Type:    messageType,
+		Message: message,
 	}
 
-	resp := RpcResponse{}
-	return r.client.Call(RpcMethodHandle, &req, &resp)
-}
-
-func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
-	return r.client.Call(RpcMethodAppendEntries, arg, reply)
+	resp := RpcResponse{
+		Id:      0,
+		Message: []byte{},
+	}
+	return req, resp
 }

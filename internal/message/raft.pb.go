@@ -138,6 +138,53 @@ func (x *NodeMetadata) GetAddress() *Address {
 	return nil
 }
 
+type NodeMetadataesList struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Nodes []*NodeMetadata `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+}
+
+func (x *NodeMetadataesList) Reset() {
+	*x = NodeMetadataesList{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_internal_message_raft_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *NodeMetadataesList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeMetadataesList) ProtoMessage() {}
+
+func (x *NodeMetadataesList) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_message_raft_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeMetadataesList.ProtoReflect.Descriptor instead.
+func (*NodeMetadataesList) Descriptor() ([]byte, []int) {
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *NodeMetadataesList) GetNodes() []*NodeMetadata {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
 type ApplyEntry struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -149,7 +196,7 @@ type ApplyEntry struct {
 func (x *ApplyEntry) Reset() {
 	*x = ApplyEntry{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_message_raft_proto_msgTypes[2]
+		mi := &file_internal_message_raft_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -162,7 +209,7 @@ func (x *ApplyEntry) String() string {
 func (*ApplyEntry) ProtoMessage() {}
 
 func (x *ApplyEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_message_raft_proto_msgTypes[2]
+	mi := &file_internal_message_raft_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -175,7 +222,7 @@ func (x *ApplyEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyEntry.ProtoReflect.Descriptor instead.
 func (*ApplyEntry) Descriptor() ([]byte, []int) {
-	return file_internal_message_raft_proto_rawDescGZIP(), []int{2}
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ApplyEntry) GetLog() []byte {
@@ -197,7 +244,7 @@ type LogEntry struct {
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_message_raft_proto_msgTypes[3]
+		mi := &file_internal_message_raft_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -210,7 +257,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_message_raft_proto_msgTypes[3]
+	mi := &file_internal_message_raft_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -223,7 +270,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_internal_message_raft_proto_rawDescGZIP(), []int{3}
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *LogEntry) GetTerm() uint64 {
@@ -252,7 +299,7 @@ type RequestVote struct {
 func (x *RequestVote) Reset() {
 	*x = RequestVote{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_message_raft_proto_msgTypes[4]
+		mi := &file_internal_message_raft_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -265,7 +312,7 @@ func (x *RequestVote) String() string {
 func (*RequestVote) ProtoMessage() {}
 
 func (x *RequestVote) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_message_raft_proto_msgTypes[4]
+	mi := &file_internal_message_raft_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -278,7 +325,7 @@ func (x *RequestVote) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVote.ProtoReflect.Descriptor instead.
 func (*RequestVote) Descriptor() ([]byte, []int) {
-	return file_internal_message_raft_proto_rawDescGZIP(), []int{4}
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RequestVote) GetTerm() uint64 {
@@ -307,7 +354,7 @@ type RequestVoteReply struct {
 func (x *RequestVoteReply) Reset() {
 	*x = RequestVoteReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_message_raft_proto_msgTypes[5]
+		mi := &file_internal_message_raft_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -320,7 +367,7 @@ func (x *RequestVoteReply) String() string {
 func (*RequestVoteReply) ProtoMessage() {}
 
 func (x *RequestVoteReply) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_message_raft_proto_msgTypes[5]
+	mi := &file_internal_message_raft_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -333,7 +380,7 @@ func (x *RequestVoteReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteReply.ProtoReflect.Descriptor instead.
 func (*RequestVoteReply) Descriptor() ([]byte, []int) {
-	return file_internal_message_raft_proto_rawDescGZIP(), []int{5}
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RequestVoteReply) GetTerm() uint64 {
@@ -366,7 +413,7 @@ type AppendEntries struct {
 func (x *AppendEntries) Reset() {
 	*x = AppendEntries{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_message_raft_proto_msgTypes[6]
+		mi := &file_internal_message_raft_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -379,7 +426,7 @@ func (x *AppendEntries) String() string {
 func (*AppendEntries) ProtoMessage() {}
 
 func (x *AppendEntries) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_message_raft_proto_msgTypes[6]
+	mi := &file_internal_message_raft_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -392,7 +439,7 @@ func (x *AppendEntries) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntries.ProtoReflect.Descriptor instead.
 func (*AppendEntries) Descriptor() ([]byte, []int) {
-	return file_internal_message_raft_proto_rawDescGZIP(), []int{6}
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AppendEntries) GetTerm() uint64 {
@@ -452,7 +499,7 @@ type AppendEntriesReply struct {
 func (x *AppendEntriesReply) Reset() {
 	*x = AppendEntriesReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_message_raft_proto_msgTypes[7]
+		mi := &file_internal_message_raft_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -465,7 +512,7 @@ func (x *AppendEntriesReply) String() string {
 func (*AppendEntriesReply) ProtoMessage() {}
 
 func (x *AppendEntriesReply) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_message_raft_proto_msgTypes[7]
+	mi := &file_internal_message_raft_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -478,7 +525,7 @@ func (x *AppendEntriesReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesReply.ProtoReflect.Descriptor instead.
 func (*AppendEntriesReply) Descriptor() ([]byte, []int) {
-	return file_internal_message_raft_proto_rawDescGZIP(), []int{7}
+	return file_internal_message_raft_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AppendEntriesReply) GetTerm() uint64 {
@@ -530,6 +577,10 @@ var file_internal_message_raft_proto_rawDesc = []byte{
 	0x09, 0x52, 0x05, 0x67, 0x72, 0x6f, 0x75, 0x70, 0x12, 0x27, 0x0a, 0x07, 0x61, 0x64, 0x64, 0x72,
 	0x65, 0x73, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x72, 0x61, 0x66, 0x74,
 	0x2e, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x52, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73,
+	0x73, 0x22, 0x3e, 0x0a, 0x12, 0x4e, 0x6f, 0x64, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74,
+	0x61, 0x65, 0x73, 0x4c, 0x69, 0x73, 0x74, 0x12, 0x28, 0x0a, 0x05, 0x6e, 0x6f, 0x64, 0x65, 0x73,
+	0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x72, 0x61, 0x66, 0x74, 0x2e, 0x4e, 0x6f,
+	0x64, 0x65, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x05, 0x6e, 0x6f, 0x64, 0x65,
 	0x73, 0x22, 0x1e, 0x0a, 0x0a, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12,
 	0x10, 0x0a, 0x03, 0x6c, 0x6f, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6c, 0x6f,
 	0x67, 0x22, 0x3d, 0x0a, 0x08, 0x4c, 0x6f, 0x67, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x12, 0x0a,
@@ -588,25 +639,27 @@ func file_internal_message_raft_proto_rawDescGZIP() []byte {
 	return file_internal_message_raft_proto_rawDescData
 }
 
-var file_internal_message_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_internal_message_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_internal_message_raft_proto_goTypes = []interface{}{
 	(*Address)(nil),            // 0: raft.Address
 	(*NodeMetadata)(nil),       // 1: raft.NodeMetadata
-	(*ApplyEntry)(nil),         // 2: raft.ApplyEntry
-	(*LogEntry)(nil),           // 3: raft.LogEntry
-	(*RequestVote)(nil),        // 4: raft.RequestVote
-	(*RequestVoteReply)(nil),   // 5: raft.RequestVoteReply
-	(*AppendEntries)(nil),      // 6: raft.AppendEntries
-	(*AppendEntriesReply)(nil), // 7: raft.AppendEntriesReply
+	(*NodeMetadataesList)(nil), // 2: raft.NodeMetadataesList
+	(*ApplyEntry)(nil),         // 3: raft.ApplyEntry
+	(*LogEntry)(nil),           // 4: raft.LogEntry
+	(*RequestVote)(nil),        // 5: raft.RequestVote
+	(*RequestVoteReply)(nil),   // 6: raft.RequestVoteReply
+	(*AppendEntries)(nil),      // 7: raft.AppendEntries
+	(*AppendEntriesReply)(nil), // 8: raft.AppendEntriesReply
 }
 var file_internal_message_raft_proto_depIdxs = []int32{
 	0, // 0: raft.NodeMetadata.address:type_name -> raft.Address
-	3, // 1: raft.AppendEntries.entries:type_name -> raft.LogEntry
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // 1: raft.NodeMetadataesList.nodes:type_name -> raft.NodeMetadata
+	4, // 2: raft.AppendEntries.entries:type_name -> raft.LogEntry
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_internal_message_raft_proto_init() }
@@ -640,7 +693,7 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 		file_internal_message_raft_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ApplyEntry); i {
+			switch v := v.(*NodeMetadataesList); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -652,7 +705,7 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 		file_internal_message_raft_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*LogEntry); i {
+			switch v := v.(*ApplyEntry); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -664,7 +717,7 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 		file_internal_message_raft_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RequestVote); i {
+			switch v := v.(*LogEntry); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -676,7 +729,7 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 		file_internal_message_raft_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RequestVoteReply); i {
+			switch v := v.(*RequestVote); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -688,7 +741,7 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 		file_internal_message_raft_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AppendEntries); i {
+			switch v := v.(*RequestVoteReply); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -700,6 +753,18 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 		file_internal_message_raft_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AppendEntries); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_internal_message_raft_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AppendEntriesReply); i {
 			case 0:
 				return &v.state
@@ -712,14 +777,14 @@ func file_internal_message_raft_proto_init() {
 			}
 		}
 	}
-	file_internal_message_raft_proto_msgTypes[3].OneofWrappers = []interface{}{}
+	file_internal_message_raft_proto_msgTypes[4].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_internal_message_raft_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -9,6 +9,8 @@ import (
 	"github.com/ISSuh/raft/internal/net/rpc"
 )
 
+var stop bool = false
+
 func main() {
 	eventChan := make(chan event.Event)
 
@@ -28,14 +30,14 @@ func main() {
 	t := rpc.NewRpcTransporter(config, h)
 
 	q := make(chan interface{})
-	go func(eventChan <-chan event.Event, q <-chan interface{}) {
+	go func(eventChan chan event.Event, q <-chan interface{}) {
 		for {
 			select {
 			case <-q:
 				return
 			case e := <-eventChan:
 				fmt.Printf("[TEST] event : %s\n", e)
-				e.EventResultChannel <- event.EventResult{
+				e.EventResultChannel <- &event.EventResult{
 					Err:    nil,
 					Result: true,
 				}
@@ -44,12 +46,12 @@ func main() {
 		}
 	}(eventChan, q)
 
-	c, cancel := context.WithCancel(context.Background())
+	c, _ := context.WithCancel(context.Background())
 	if err := t.Serve(c); err != nil {
 		return
 	}
 
-	q <- true
-	cancel()
+	// q <- true
+	// cancel()
 	t.StopAndWait()
 }

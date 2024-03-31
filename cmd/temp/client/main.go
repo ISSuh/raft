@@ -40,15 +40,19 @@ func main() {
 		return
 	}
 
-	// if err := requestor.HelthCheck(); err != nil {
-	// 	fmt.Println(err.Error())
-	// 	return
-	// }
+	if err := requestor.HelthCheck(); err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 
 	for i := 0; i < 5; i++ {
-		var args message.RequestVote
-		var reply message.RequestVoteReply
-		if err := requestor.RequestVote(&args, &reply); err != nil {
+		args := message.RequestVote{
+			Term:        0,
+			CandidateId: 1,
+		}
+
+		reply, err := requestor.RequestVote(&args)
+		if err != nil {
 			fmt.Println(err.Error())
 		}
 		fmt.Printf("reply : %+v\n", reply)

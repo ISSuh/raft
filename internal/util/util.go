@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package util
 
 import (
 	"fmt"
@@ -71,4 +71,11 @@ func Max(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func BooleanToByte(value bool) byte {
+	if value {
+		return byte(1)
+	}
+	return byte(0)
 }

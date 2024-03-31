@@ -74,7 +74,7 @@ type Event struct {
 	Type               EventType
 	Message            interface{}
 	Timestamp          time.Time
-	EventResultChannel chan<- EventResult
+	EventResultChannel chan *EventResult
 }
 
 func NewEvent(eventType EventType, message interface{}) Event {
@@ -82,7 +82,7 @@ func NewEvent(eventType EventType, message interface{}) Event {
 		Type:               eventType,
 		Message:            message,
 		Timestamp:          time.Now(),
-		EventResultChannel: make(chan EventResult),
+		EventResultChannel: make(chan *EventResult),
 	}
 }
 
@@ -90,15 +90,19 @@ func (e Event) String() string {
 	return fmt.Sprintf("Event{Type:%s, Message:%+v, Timestamp:%s}", e.Type, e.Message, e.Timestamp)
 }
 
-func (e *Event) Notify(eventChannel chan<- Event) (*EventResult, error) {
-	resultChannel := make(chan *EventResult)
-	eventChannel <- *e
-
-	timeoutChan := time.After(1 * time.Second)
+func (e *Event) Notify(eventChannel chan Event) (*EventResult, error) {
+	eventNotifyTimeoutChan := time.After(1 * time.Second)
 	select {
-	case result := <-resultChannel:
+	case eventChannel <- *e:
+	case <-eventNotifyTimeoutChan:
+		return nil, fmt.Errorf("[ClusterRpcHandler.notifyEvent] %s evnet timeout.", e.Type)
+	}
+
+	eventResultTimeoutChan := time.After(1 * time.Second)
+	select {
+	case result := <-e.EventResultChannel:
 		return result, nil
-	case <-timeoutChan:
+	case <-eventResultTimeoutChan:
 		return nil, fmt.Errorf("[ClusterRpcHandler.notifyEvent] %s evnet timeout.", e.Type)
 	}
 }

@@ -29,19 +29,22 @@ import (
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/util"
+	"google.golang.org/protobuf/proto"
 )
 
 type NodeRpcHandler struct {
-	eventChannel chan<- event.Event
+	eventChannel chan event.Event
 }
 
-func NewNodeRpcHandler(eventChannel chan<- event.Event) RpcHandler {
+func NewNodeRpcHandler(eventChannel chan event.Event) RpcHandler {
 	return &NodeRpcHandler{
 		eventChannel: eventChannel,
 	}
 }
 
 func (h *NodeRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
+	fmt.Printf("[NodeRpcHandler.Handle]\n")
 	var err error
 	switch req.Type {
 	case event.HealthCheck:
@@ -51,7 +54,7 @@ func (h *NodeRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
 	case event.AppendEntries:
 		err = h.processAppendEntriesEvent(req, resp)
 	case event.ApplyEntry:
-		err = h.processAppendEntriesEvent(req, resp)
+		err = h.processApplyEntryEvent(req, resp)
 	default:
 		err = fmt.Errorf("invalid event type. %d", req.Type)
 	}
@@ -60,23 +63,29 @@ func (h *NodeRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
 
 func (h *NodeRpcHandler) HelthCheck(req *RpcRequest, resp *RpcResponse) error {
 	resp.Id = req.Id
-	resp.Message = true
+	resp.Message = []byte{byte(1)}
 	return nil
 }
 
 func (h *NodeRpcHandler) processRequestVoteEvent(req *RpcRequest, resp *RpcResponse) error {
-	message, ok := req.Message.(*message.RequestVote)
-	if !ok {
-		return fmt.Errorf("[ClusterRpcHandler.processRequestVoteEvent] invalid message. %v\n", req.Message)
+	message := &message.RequestVote{}
+	err := proto.Unmarshal(req.Message, message)
+	if err != nil {
+		return fmt.Errorf("[NodeRpcHandler.processRequestVoteEvent] invalid message. %v\n", req.Message)
 	}
 
-	replyMessage, err := h.RequestVote(message)
+	requestVoteReply, err := h.RequestVote(message)
+	if err != nil {
+		return err
+	}
+
+	resultMessage, err := proto.Marshal(requestVoteReply)
 	if err != nil {
 		return err
 	}
 
 	resp.Id = req.Id
-	resp.Message = replyMessage
+	resp.Message = resultMessage
 	return nil
 }
 
@@ -96,18 +105,24 @@ func (h *NodeRpcHandler) RequestVote(requestVoteMessage *message.RequestVote) (*
 }
 
 func (h *NodeRpcHandler) processAppendEntriesEvent(req *RpcRequest, resp *RpcResponse) error {
-	message, ok := req.Message.(*message.AppendEntries)
-	if !ok {
-		return fmt.Errorf("[ClusterRpcHandler.processAppendEntriesEvent] invalid message. %v\n", req.Message)
+	message := &message.AppendEntries{}
+	err := proto.Unmarshal(req.Message, message)
+	if err != nil {
+		return fmt.Errorf("[NodeRpcHandler.processAppendEntriesEvent] invalid message. %v\n", req.Message)
 	}
 
-	replyMessage, err := h.AppendEntries(message)
+	appendEntriesReply, err := h.AppendEntries(message)
+	if err != nil {
+		return err
+	}
+
+	resultMessage, err := proto.Marshal(appendEntriesReply)
 	if err != nil {
 		return err
 	}
 
 	resp.Id = req.Id
-	resp.Message = replyMessage
+	resp.Message = resultMessage
 	return nil
 }
 
@@ -127,18 +142,19 @@ func (h *NodeRpcHandler) AppendEntries(appendEntriesMessage *message.AppendEntri
 }
 
 func (h *NodeRpcHandler) processApplyEntryEvent(req *RpcRequest, resp *RpcResponse) error {
-	message, ok := req.Message.(*message.ApplyEntry)
-	if !ok {
-		return fmt.Errorf("[ClusterRpcHandler.processApplyEntryEvent] invalid message. %v\n", req.Message)
+	message := &message.ApplyEntry{}
+	err := proto.Unmarshal(req.Message, message)
+	if err != nil {
+		return fmt.Errorf("[NodeRpcHandler.processApplyEntryEvent] invalid message. %v\n", req.Message)
 	}
 
-	replyMessage, err := h.ApplyEntry(message)
+	success, err := h.ApplyEntry(message)
 	if err != nil {
 		return err
 	}
 
 	resp.Id = req.Id
-	resp.Message = replyMessage
+	resp.Message = []byte{util.BooleanToByte(success)}
 	return nil
 }
 

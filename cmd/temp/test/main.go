@@ -122,7 +122,7 @@ func main() {
 	value := "test"
 	arg := RpcArgument{
 		Id:      "0",
-		Message: value,
+		Message: &value,
 	}
 	reply := RpcResponse{}
 	err = cli.Call("test.Func", &arg, &reply)
@@ -131,7 +131,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("reply = %v\n", reply)
+	fmt.Printf("value = %d, reply = %v\n", value, reply)
 
 	time.Sleep(1 * time.Second)
 	candel()

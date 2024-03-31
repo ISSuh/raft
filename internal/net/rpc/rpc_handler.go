@@ -29,12 +29,12 @@ import "github.com/ISSuh/raft/internal/event"
 type RpcRequest struct {
 	Id      uint32
 	Type    event.EventType
-	Message interface{}
+	Message []byte
 }
 
 type RpcResponse struct {
 	Id      uint32
-	Message interface{}
+	Message []byte
 }
 
 type RpcHandler interface {
