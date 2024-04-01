@@ -70,3 +70,14 @@ func (n *nodeManager) findNode(nodeId int) (*message.NodeMetadata, error) {
 	}
 	return node, nil
 }
+
+func (n *nodeManager) nodeList() *message.NodeMetadataesList {
+	list := &message.NodeMetadataesList{
+		Nodes: make([]*message.NodeMetadata, len(n.nodes)),
+	}
+	// list := make([]*message.NodeMetadata, len(n.nodes))
+	for i, node := range n.nodes {
+		list.Nodes[i] = node
+	}
+	return list
+}

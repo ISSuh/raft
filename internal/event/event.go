@@ -33,7 +33,7 @@ type EventType int
 
 const (
 	// node  event
-	ConnectPeer EventType = iota
+	NotifyMeToNode EventType = iota
 	ReqeustVote
 	Timeout
 	VoteTimeout
@@ -43,14 +43,15 @@ const (
 	HealthCheck
 
 	// cluster event
-	ConnectNode
+	NotifyMeToCluster
 	DeleteNode
+	NodeList
 )
 
 func (t EventType) String() string {
 	switch t {
-	case ConnectPeer:
-		return "ConnectPeer"
+	case NotifyMeToNode:
+		return "NotifyMeToNode"
 	case ReqeustVote:
 		return "ReqeustVote"
 	case Timeout:
@@ -61,6 +62,8 @@ func (t EventType) String() string {
 		return "CandidateTimeout"
 	case AppendEntries:
 		return "AppendEntries"
+	case NotifyMeToCluster:
+		return "NotifyMeToCluster"
 	}
 	return ""
 }

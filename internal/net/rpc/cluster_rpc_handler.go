@@ -46,24 +46,26 @@ func NewClusterRpcHandler(eventChannel chan event.Event) RpcHandler {
 func (h *ClusterRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
 	var err error
 	switch req.Type {
-	case event.ConnectNode:
-		err = h.processConnectNodeEvent(req, resp)
+	case event.NotifyMeToCluster:
+		err = h.processNotifyMeToClusterEvent(req, resp)
 	case event.DeleteNode:
 		err = h.processDeleteNodeEvent(req, resp)
+	case event.NodeList:
+		err = h.processNodeListEvent(req, resp)
 	default:
 		err = fmt.Errorf("invalid event type. %d", req.Type)
 	}
 	return err
 }
 
-func (h *ClusterRpcHandler) processConnectNodeEvent(req *RpcRequest, resp *RpcResponse) error {
+func (h *ClusterRpcHandler) processNotifyMeToClusterEvent(req *RpcRequest, resp *RpcResponse) error {
 	message := &message.NodeMetadata{}
 	err := proto.Unmarshal(req.Message, message)
 	if err != nil {
-		return fmt.Errorf("[ClusterRpcHandler.processConnectNodeEvent] invalid message. %v\n", req.Message)
+		return fmt.Errorf("[ClusterRpcHandler.processNotifyMeToClusterEvent] invalid message. %v\n", req.Message)
 	}
 
-	peers, err := h.connectNode(message)
+	peers, err := h.notifyMeToCluster(message)
 	if err != nil {
 		return err
 	}
@@ -78,10 +80,10 @@ func (h *ClusterRpcHandler) processConnectNodeEvent(req *RpcRequest, resp *RpcRe
 	return nil
 }
 
-func (h *ClusterRpcHandler) connectNode(node *message.NodeMetadata) (*message.NodeMetadataesList, error) {
-	fmt.Printf("[ClusterRpcHandler.ApplyEntry]\n")
+func (h *ClusterRpcHandler) notifyMeToCluster(node *message.NodeMetadata) (*message.NodeMetadataesList, error) {
+	fmt.Printf("[ClusterRpcHandler.notifyMe]\n")
 
-	eventResult, err := h.notifyEvent(event.ConnectNode, node)
+	eventResult, err := h.notifyEvent(event.NotifyMeToCluster, node)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,7 @@ func (h *ClusterRpcHandler) connectNode(node *message.NodeMetadata) (*message.No
 
 	result, ok := eventResult.Result.(*message.NodeMetadataesList)
 	if !ok {
-		return nil, fmt.Errorf("[ClusterRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
+		return nil, fmt.Errorf("[ClusterRpcHandler.notifyMe] invalid event response. %v\n", eventResult)
 	}
 	return result, nil
 }
@@ -128,9 +130,44 @@ func (h *ClusterRpcHandler) deleteNode(node *message.NodeMetadata) (bool, error)
 
 	result, ok := eventResult.Result.(*bool)
 	if !ok {
-		return false, fmt.Errorf("[ClusterRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
+		return false, fmt.Errorf("[ClusterRpcHandler.deleteNode] invalid event response. %v\n", eventResult)
 	}
 	return *result, nil
+}
+
+func (h *ClusterRpcHandler) processNodeListEvent(req *RpcRequest, resp *RpcResponse) error {
+	result, err := h.nodeList()
+	if err != nil {
+		return err
+	}
+
+	resultMessage, err := proto.Marshal(result)
+	if err != nil {
+		return err
+	}
+
+	resp.Id = req.Id
+	resp.Message = resultMessage
+	return nil
+}
+
+func (h *ClusterRpcHandler) nodeList() (*message.NodeMetadataesList, error) {
+	fmt.Printf("[ClusterRpcHandler.nodeList]\n")
+
+	eventResult, err := h.notifyEvent(event.NodeList, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if eventResult.Err != nil {
+		return nil, eventResult.Err
+	}
+
+	result, ok := eventResult.Result.(*message.NodeMetadataesList)
+	if !ok {
+		return nil, fmt.Errorf("[ClusterRpcHandler.nodeList] invalid event response. %v\n", eventResult)
+	}
+	return result, nil
 }
 
 func (h *ClusterRpcHandler) notifyEvent(eventType event.EventType, message interface{}) (*event.EventResult, error) {

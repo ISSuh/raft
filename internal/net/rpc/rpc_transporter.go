@@ -27,13 +27,14 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"net"
+	gonet "net"
 	"net/rpc"
 	"strconv"
 	"sync"
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/net"
 )
 
 const (
@@ -42,8 +43,8 @@ const (
 )
 
 type RpcTransporter struct {
-	config     config.Config
-	listener   net.Listener
+	address    config.Address
+	listener   gonet.Listener
 	rpcServer  *rpc.Server
 	rpcHandler RpcHandler
 
@@ -51,9 +52,9 @@ type RpcTransporter struct {
 	wg   sync.WaitGroup
 }
 
-func NewRpcTransporter(config config.Config, handler RpcHandler) *RpcTransporter {
+func NewRpcTransporter(address config.Address, handler RpcHandler) *RpcTransporter {
 	return &RpcTransporter{
-		config:     config,
+		address:    address,
 		rpcServer:  rpc.NewServer(),
 		rpcHandler: handler,
 		quit:       make(chan bool),
@@ -76,8 +77,8 @@ func (t *RpcTransporter) serveRpcServer(context context.Context) error {
 		return err
 	}
 
-	address := t.config.Raft.Server.Address.String()
-	t.listener, err = net.Listen(RpcNetworkProtocol, address)
+	address := t.address.String()
+	t.listener, err = gonet.Listen(RpcNetworkProtocol, address)
 	if err != nil {
 		return err
 	}
@@ -115,15 +116,15 @@ func (t *RpcTransporter) runServer(context context.Context) {
 	}()
 }
 
-func (t *RpcTransporter) ConnectPeerNode(node message.NodeMetadata) (*RpcRequestor, error) {
+func (t *RpcTransporter) ConnectPeerNode(node *message.NodeMetadata) (net.NodeRequester, error) {
 	ip := node.Address.Ip
 	port := strconv.Itoa(int(node.Address.Port))
 	if len(port) <= 1 {
-		return nil, fmt.Errorf("[RpcTransporter.registPeerNode] invalid peer port. %d", node.Address.Port)
+		return nil, fmt.Errorf("[RpcTransporter.ConnectPeerNode] invalid peer port. %d", node.Address.Port)
 	}
 
 	address := ip + ":" + port
-	addr, err := net.ResolveTCPAddr("tcp", address)
+	addr, err := gonet.ResolveTCPAddr(RpcNetworkProtocol, address)
 	if err != nil {
 		return nil, err
 	}
@@ -132,8 +133,18 @@ func (t *RpcTransporter) ConnectPeerNode(node message.NodeMetadata) (*RpcRequest
 	if err != nil {
 		return nil, err
 	}
+	return NewNodeRequester(client), nil
+}
 
-	return &RpcRequestor{
-		client: client,
-	}, nil
+func (t *RpcTransporter) ConnectCluster(address config.Address) (net.ClusterRequester, error) {
+	addr, err := gonet.ResolveTCPAddr(RpcNetworkProtocol, address.String())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := rpc.Dial(addr.Network(), addr.String())
+	if err != nil {
+		return nil, err
+	}
+	return NewClusterRequester(client), nil
 }

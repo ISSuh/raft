@@ -24,41 +24,8 @@ SOFTWARE.
 
 package node
 
-import (
-	"context"
-	"fmt"
+import "github.com/ISSuh/raft/internal/net"
 
-	"github.com/ISSuh/raft/internal/event"
-	"github.com/ISSuh/raft/internal/message"
-)
-
-type RaftNode struct {
-	metadata  *message.NodeMetadata
-	eventChan chan event.Event
-}
-
-func NewRaftNode(metadata *message.NodeMetadata, eventChan chan event.Event) *RaftNode {
-	return &RaftNode{
-		metadata:  metadata,
-		eventChan: eventChan,
-	}
-}
-
-func (n *RaftNode) NodeMetaData() *message.NodeMetadata {
-	return n.metadata
-}
-
-func (n *RaftNode) Run(c context.Context) {
-	go n.eventLoop(c)
-}
-
-func (n *RaftNode) eventLoop(c context.Context) {
-	for {
-		select {
-		case <-c.Done():
-			fmt.Printf("[RaftNode.eventLoop] context done\n")
-		case event := <-n.eventChan:
-			fmt.Printf("[RaftNode.eventLoop] event : %s\n", event)
-		}
-	}
+type PeerNodeManager struct {
+	transpoter net.Transporter
 }

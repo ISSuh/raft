@@ -32,22 +32,27 @@ import (
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/net"
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	RpcMethodHandle        = "Raft.Handle"
-	RpcMethodHelthCheck    = "Raft.HelthCheck"
-	RpcMethodConnectToPeer = "Raft.ConnectToPeer"
-	RpcMethodRequestVote   = "Raft.RequestVote"
-	RpcMethodAppendEntries = "Raft.AppendEntries"
-)
-
-type RpcRequestor struct {
+type RpcRequester struct {
 	client *rpc.Client
 }
 
-func (r *RpcRequestor) HelthCheck() error {
+func NewNodeRequester(client *rpc.Client) net.NodeRequester {
+	return &RpcRequester{
+		client: client,
+	}
+}
+
+func NewClusterRequester(client *rpc.Client) net.ClusterRequester {
+	return &RpcRequester{
+		client: client,
+	}
+}
+
+func (r *RpcRequester) HelthCheck() error {
 	req := RpcRequest{
 		Id:      rand.Uint32(),
 		Type:    event.HealthCheck,
@@ -58,13 +63,13 @@ func (r *RpcRequestor) HelthCheck() error {
 	return r.client.Call(RpcMethodHandle, &req, &resp)
 }
 
-func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata) (bool, error) {
+func (r *RpcRequester) NotifyMeToPeerNode(arg *message.NodeMetadata) (bool, error) {
 	data, err := proto.Marshal(arg)
 	if err != nil {
 		return false, err
 	}
 
-	req, resp := r.makeRpcRequestResponse(event.ReqeustVote, data)
+	req, resp := r.makeRpcRequestResponse(event.NotifyMeToNode, data)
 	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
 		return false, err
 	}
@@ -83,7 +88,7 @@ func (r *RpcRequestor) ConnectToPeer(arg *message.NodeMetadata) (bool, error) {
 	return reply, nil
 }
 
-func (r *RpcRequestor) RequestVote(arg *message.RequestVote) (*message.RequestVoteReply, error) {
+func (r *RpcRequester) RequestVote(arg *message.RequestVote) (*message.RequestVoteReply, error) {
 	data, err := proto.Marshal(arg)
 	if err != nil {
 		return nil, err
@@ -108,7 +113,7 @@ func (r *RpcRequestor) RequestVote(arg *message.RequestVote) (*message.RequestVo
 	return reply, nil
 }
 
-func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries) (*message.AppendEntriesReply, error) {
+func (r *RpcRequester) AppendEntries(arg *message.AppendEntries) (*message.AppendEntriesReply, error) {
 	data, err := proto.Marshal(arg)
 	if err != nil {
 		return nil, err
@@ -121,7 +126,7 @@ func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries) (*message.Appen
 
 	if req.Id != resp.Id {
 		return nil,
-			fmt.Errorf("[RpcRequestor.RequestVote] not matched request, respnse id. [request id = %d, response id = %d]",
+			fmt.Errorf("[RpcRequestor.AppendEntries] not matched request, respnse id. [request id = %d, response id = %d]",
 				req.Id, resp.Id,
 			)
 	}
@@ -133,7 +138,56 @@ func (r *RpcRequestor) AppendEntries(arg *message.AppendEntries) (*message.Appen
 	return reply, nil
 }
 
-func (r *RpcRequestor) makeRpcRequestResponse(messageType event.EventType, message []byte) (RpcRequest, RpcResponse) {
+func (r *RpcRequester) NotifyMeToCluster(arg *message.NodeMetadata) (*message.NodeMetadataesList, error) {
+	data, err := proto.Marshal(arg)
+	if err != nil {
+		return nil, err
+	}
+
+	req, resp := r.makeRpcRequestResponse(event.NotifyMeToCluster, data)
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		return nil, err
+	}
+
+	reply := &message.NodeMetadataesList{}
+	if err := proto.Unmarshal(resp.Message, reply); err != nil {
+		return nil, err
+	}
+	return reply, nil
+}
+
+func (r *RpcRequester) Disconnect(arg *message.NodeMetadata) error {
+	data, err := proto.Marshal(arg)
+	if err != nil {
+		return err
+	}
+
+	req, resp := r.makeRpcRequestResponse(event.DeleteNode, data)
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		return err
+	}
+
+	_, err = strconv.ParseBool(string(resp.Message))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *RpcRequester) NodeList() (*message.NodeMetadataesList, error) {
+	req, resp := r.makeRpcRequestResponse(event.NodeList, []byte{})
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		return nil, err
+	}
+
+	reply := &message.NodeMetadataesList{}
+	if err := proto.Unmarshal(resp.Message, reply); err != nil {
+		return nil, err
+	}
+	return reply, nil
+}
+
+func (r *RpcRequester) makeRpcRequestResponse(messageType event.EventType, message []byte) (RpcRequest, RpcResponse) {
 	req := RpcRequest{
 		Id:      rand.Uint32(),
 		Type:    messageType,

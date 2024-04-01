@@ -47,15 +47,10 @@ func NewRaftCluster(config config.Config) (*RaftCluster, error) {
 	eventChannel := make(chan event.Event)
 	handler := rpc.NewClusterRpcHandler(eventChannel)
 
-	transporter, err := rpc.NewRpcTransporter(config, handler)
-	if err != nil {
-		return nil, err
-	}
-
 	return &RaftCluster{
 		config:       config,
 		manager:      NewNodeManager(),
-		transporter:  transporter,
+		transporter:  rpc.NewRpcTransporter(config, handler),
 		eventChannel: eventChannel,
 	}, nil
 }
@@ -75,28 +70,54 @@ func (c *RaftCluster) eventLoop(context context.Context) {
 			fmt.Printf("[RaftCluster.eventLoog] context canceled")
 			return
 		case e := <-c.eventChannel:
-			if err := c.processEvent(e); err != nil {
+			result, err := c.processEvent(e)
+			if err != nil {
 				fmt.Printf("[RaftCluster.eventLoog] err  %s", err.Error())
+			}
+
+			e.EventResultChannel <- &event.EventResult{
+				Err:    err,
+				Result: result,
 			}
 		}
 	}
 }
 
-func (c *RaftCluster) processEvent(e event.Event) error {
+func (c *RaftCluster) processEvent(e event.Event) (interface{}, error) {
 	var err error
+	var result interface{}
 	switch e.Type {
 	case event.ConnectNode:
-
+		result, err = c.onConnectToCluster(e)
 	case event.DeleteNode:
+		err = c.onDisconnect(e)
+	case event.NodeList:
+		result, err = c.onNodeList()
 	}
+	return result, err
 }
 
-func (c *RaftCluster) onConnectNode(e event.Event) ([]*message.NodeMetadata, error) {
-	return nil, nil
+func (c *RaftCluster) onConnectToCluster(e event.Event) (*message.NodeMetadataesList, error) {
+	node, ok := e.Message.(*message.NodeMetadata)
+	if !ok {
+		return nil, fmt.Errorf("[RaftCluster.onConnectToCluster] can not convert to *message.NodeMetadata. %v", e)
+	}
+
+	nodeList := c.manager.nodeList()
+	c.manager.addNode(node)
+	return nodeList, nil
 }
 
-func (c *RaftCluster) onDeleteNode(e event.Event) error {
+func (c *RaftCluster) onDisconnect(e event.Event) error {
+	node, ok := e.Message.(*message.NodeMetadata)
+	if !ok {
+		return fmt.Errorf("[RaftCluster.onDisconnect] can not convert to *message.NodeMetadata. %v", e)
+	}
 
-	c.manager.
+	c.manager.removeNode(int(node.Id))
 	return nil
+}
+
+func (c *RaftCluster) onNodeList() (*message.NodeMetadataesList, error) {
+	return c.manager.nodeList(), nil
 }

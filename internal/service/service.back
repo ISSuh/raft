@@ -29,10 +29,8 @@ import (
 	"fmt"
 
 	"github.com/ISSuh/raft/internal/config"
-	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
-	"github.com/ISSuh/raft/internal/net/rpc"
 	"github.com/ISSuh/raft/internal/node"
 )
 
@@ -50,53 +48,82 @@ func (t *TestEntryHandler) EntryUpdated(log []byte) {
 type RaftService struct {
 	config      config.Config
 	node        *node.RaftNode
-	requester   net.ClusterRequester
 	transporter net.Transporter
+	context     context.Context
+	testBlock   chan bool
 }
 
 func NewRaftService(config config.Config) *RaftService {
-	c := make(chan event.Event)
-	h := rpc.NewNodeRpcHandler(c)
-	t := rpc.NewRpcTransporter(config.Raft.Server.Address, h)
-
-	metadata := &message.NodeMetadata{
-		Id: int32(config.Raft.Server.Id),
-		Address: &message.Address{
-			Ip:   config.Raft.Server.Address.Ip,
-			Port: int32(config.Raft.Server.Address.Port),
-		},
+	address := config.Raft.Server.Address.Ip + ":" + config.Raft.Server.Address.Port
+	nodeInfo := node.NodeInfo{
+		Id:      config.Raft.Server.Id,
+		Address: address,
 	}
 
-	node := node.NewRaftNode(metadata, c)
+	t := net.NewRpcTransporter()
+	n := node.NewRaftNode(nodeInfo, t)
+	t.RegistHandler(n)
+
 	s := &RaftService{
 		config:      config,
-		node:        node,
+		node:        n,
 		transporter: t,
+		testBlock:   make(chan bool),
 	}
 	return s
 }
 
-func (s *RaftService) Run(context context.Context) error {
-	err := s.transporter.Serve(context)
-	if err != nil {
-		return err
-	}
+func (s *RaftService) Node() *RaftNode {
+	return s.node
+}
 
-	s.requester, err = s.transporter.ConnectCluster(s.config.Raft.Cluster.Address)
-	if err != nil {
-		return err
-	}
+func (s *RaftService) RegistEntryHandler(handler EntryHandler) {
+	s.node.registEntryHandler(handler)
+}
 
-	_, err = s.requester.NotifyMeToCluster(s.node.NodeMetaData())
-	if err != nil {
-		return err
-	}
+func (s *RaftService) Run(c context.Context) {
+	s.context = c
 
-	return nil
+	err := s.transporter.Serve(s.context, s.node.info.Address)
+	if err != nil {
+		return
+	}
+	s.node.Run(s.context)
+}
+
+func (s *RaftService) Stop() {
+	s.transporter.Stop()
 }
 
 func (s *RaftService) ConnectToPeers(peers map[int]string) error {
+	myInfo := message.RegistPeer{
+		Id:      int32(s.node.info.Id),
+		Address: s.node.info.Address,
+	}
+
+	for peerId, peerAddress := range peers {
+		peerNode, err := s.transporter.RegistPeerNode(
+			&message.RegistPeer{
+				Id:      int32(peerId),
+				Address: peerAddress,
+			})
+		if err != nil {
+			continue
+		}
+
+		s.node.addPeer(peerNode.id, peerNode)
+
+		var reply bool
+		err = peerNode.ConnectToPeer(&myInfo, &reply)
+		if err != nil || !reply {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *RaftService) ApplyEntries(entris [][]byte) {
+	for _, entry := range entris {
+		s.node.ApplyEntry(entry)
+	}
 }

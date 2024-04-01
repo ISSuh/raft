@@ -27,6 +27,7 @@ package net
 import (
 	"context"
 
+	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/message"
 )
 
@@ -43,7 +44,22 @@ type Requestor interface {
 	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
 }
 
+type NodeRequester interface {
+	HelthCheck() error
+	NotifyMeToPeerNode(myNode *message.NodeMetadata) (bool, error)
+	RequestVote(message *message.RequestVote) (*message.RequestVoteReply, error)
+	AppendEntries(message *message.AppendEntries) (*message.AppendEntriesReply, error)
+}
+
+type ClusterRequester interface {
+	NotifyMeToCluster(myNode *message.NodeMetadata) (*message.NodeMetadataesList, error)
+	Disconnect(myNode *message.NodeMetadata) error
+	NodeList() (*message.NodeMetadataesList, error)
+}
+
 type Transporter interface {
 	Serve(context context.Context) error
 	StopAndWait()
+	ConnectPeerNode(peerMode *message.NodeMetadata) (NodeRequester, error)
+	ConnectCluster(address config.Address) (ClusterRequester, error)
 }

@@ -35,7 +35,7 @@ type RaftPeerNode struct {
 	requestor net.Requestor
 }
 
-func (peer *RaftPeerNode) ConnectToPeer(arg *message.RegistPeer, reply *bool) error {
+func (peer *RaftPeerNode) ConnectToPeer(my *message.NodeMetadata, reply *bool) error {
 	return peer.requestor.ConnectToPeer(arg, reply)
 }
 

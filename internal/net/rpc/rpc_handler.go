@@ -26,6 +26,10 @@ package rpc
 
 import "github.com/ISSuh/raft/internal/event"
 
+const (
+	RpcMethodHandle = "Raft.Handle"
+)
+
 type RpcRequest struct {
 	Id      uint32
 	Type    event.EventType
