@@ -87,16 +87,16 @@ func (h *NodeRpcHandler) procesNotifyMeToNodeEvent(req *RpcRequest, resp *RpcRes
 }
 
 func (h *NodeRpcHandler) notifyMeToNode(node *message.NodeMetadata) (bool, error) {
-	fmt.Printf("[NodeRpcHandler.RequestVote]\n")
+	fmt.Printf("[NodeRpcHandler.notifyMeToNode]\n")
 
-	eventResult, err := h.notifyEvent(event.ReqeustVote, node)
+	eventResult, err := h.notifyEvent(event.NotifyMeToNode, node)
 	if err != nil {
 		return false, err
 	}
 
 	result, ok := eventResult.Result.(*bool)
 	if !ok {
-		return false, fmt.Errorf("[NodeRpcHandler.RequestVote] invalid event response. %v\n", eventResult)
+		return false, fmt.Errorf("[NodeRpcHandler.notifyMeToNode] invalid event response. %v\n", eventResult)
 	}
 
 	if eventResult.Err != nil {

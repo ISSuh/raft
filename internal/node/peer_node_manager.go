@@ -24,8 +24,59 @@ SOFTWARE.
 
 package node
 
-import "github.com/ISSuh/raft/internal/net"
+import (
+	"fmt"
+
+	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/net"
+)
 
 type PeerNodeManager struct {
+	nodes      map[int32]*RaftPeerNode
 	transpoter net.Transporter
+}
+
+func NewPeerNodeManager(transpoter net.Transporter) PeerNodeManager {
+	return PeerNodeManager{
+		nodes:      map[int32]*RaftPeerNode{},
+		transpoter: transpoter,
+	}
+}
+
+func (m *PeerNodeManager) RegistPeerNode(metadata *message.NodeMetadata) (*RaftPeerNode, error) {
+	requester, err := m.transpoter.ConnectPeerNode(metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	_, exist := m.nodes[metadata.Id]
+	if exist {
+		return nil, fmt.Errorf("[PeerNodeManager.RegistPeerNode] node already exist. id : %d", metadata.Id)
+	}
+
+	node := NewRaftPeerNode(metadata, requester)
+	m.nodes[metadata.Id] = node
+	return node, nil
+}
+
+func (m *PeerNodeManager) FindPeerNode(id int) (*RaftPeerNode, error) {
+	key := int32(id)
+	node, ok := m.nodes[key]
+	if !ok {
+		return nil, fmt.Errorf("[PeerNodeManager.RemovePeerNode] ]not found peer node. id : %d", id)
+	}
+	return node, nil
+}
+
+func (m *PeerNodeManager) RemovePeerNode(id int) {
+	key := int32(id)
+	m.nodes[key].Disconnect()
+	delete(m.nodes, key)
+}
+
+func (m *PeerNodeManager) RemoveAllPeerNode() {
+	for _, node := range m.nodes {
+		node.Disconnect()
+	}
+	m.nodes = make(map[int32]*RaftPeerNode)
 }

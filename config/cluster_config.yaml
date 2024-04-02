@@ -1,0 +1,6 @@
+
+raft:
+  cluster:
+    address:
+      ip: 127.0.0.1
+      port: 33221

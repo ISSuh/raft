@@ -26,9 +26,16 @@ package cluster
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/net"
 )
+
+type node struct {
+	requester net.NodeRequester
+	metadata  *message.NodeMetadata
+}
 
 type nodeMap map[int]*message.NodeMetadata
 
@@ -44,11 +51,6 @@ func NewNodeManager() nodeManager {
 
 func (n *nodeManager) addNode(meta *message.NodeMetadata) error {
 	id := int(meta.Id)
-	_, exist := n.nodes[id]
-	if exist {
-		return fmt.Errorf("[%d] node alread exist.", meta.Id)
-	}
-
 	n.nodes[id] = meta
 	return nil
 }
@@ -73,11 +75,12 @@ func (n *nodeManager) findNode(nodeId int) (*message.NodeMetadata, error) {
 
 func (n *nodeManager) nodeList() *message.NodeMetadataesList {
 	list := &message.NodeMetadataesList{
-		Nodes: make([]*message.NodeMetadata, len(n.nodes)),
+		Nodes: make([]*message.NodeMetadata, 0),
 	}
-	// list := make([]*message.NodeMetadata, len(n.nodes))
-	for i, node := range n.nodes {
-		list.Nodes[i] = node
+
+	for _, node := range n.nodes {
+		log.Printf("[TEST]node : %+v\n", node)
+		list.Nodes = append(list.Nodes, node)
 	}
 	return list
 }

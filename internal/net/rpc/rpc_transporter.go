@@ -27,6 +27,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"log"
 	gonet "net"
 	"net/rpc"
 	"strconv"
@@ -62,7 +63,7 @@ func NewRpcTransporter(address config.Address, handler RpcHandler) *RpcTransport
 }
 
 func (t *RpcTransporter) Serve(context context.Context) error {
-	fmt.Printf("[RpcTransporter.Serve]\n")
+	log.Printf("[RpcTransporter.Serve]\n")
 	return t.serveRpcServer(context)
 }
 
@@ -97,10 +98,10 @@ func (t *RpcTransporter) runServer(context context.Context) {
 			if err != nil {
 				select {
 				case <-context.Done():
-					fmt.Printf("contex cancel\n")
+					log.Printf("contex cancel\n")
 					return
 				case <-t.quit:
-					fmt.Printf("quit\n")
+					log.Printf("quit\n")
 					return
 				default:
 					continue

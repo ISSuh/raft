@@ -29,6 +29,10 @@ import (
 	"time"
 )
 
+const (
+	TimeoutSecond = 5 * time.Second
+)
+
 type EventType int
 
 const (
@@ -94,18 +98,18 @@ func (e Event) String() string {
 }
 
 func (e *Event) Notify(eventChannel chan Event) (*EventResult, error) {
-	eventNotifyTimeoutChan := time.After(1 * time.Second)
+	eventNotifyTimeoutChan := time.After(TimeoutSecond)
 	select {
 	case eventChannel <- *e:
 	case <-eventNotifyTimeoutChan:
-		return nil, fmt.Errorf("[ClusterRpcHandler.notifyEvent] %s evnet timeout.", e.Type)
+		return nil, fmt.Errorf("[Event.Notify] %s evnet timeout.", e.Type)
 	}
 
-	eventResultTimeoutChan := time.After(1 * time.Second)
+	eventResultTimeoutChan := time.After(TimeoutSecond)
 	select {
 	case result := <-e.EventResultChannel:
 		return result, nil
 	case <-eventResultTimeoutChan:
-		return nil, fmt.Errorf("[ClusterRpcHandler.notifyEvent] %s evnet timeout.", e.Type)
+		return nil, fmt.Errorf("[Event.Notify] %s evnet timeout.", e.Type)
 	}
 }

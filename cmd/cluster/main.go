@@ -17,14 +17,14 @@ func main() {
 	}
 
 	configPath := args[0]
-	node, err := raft.NewRaftNode(configPath)
+	cluster, err := raft.NewCluster(configPath)
 	if err != nil {
 		log.Printf("%s\n", err.Error())
 		return
 	}
 
 	c, candel := context.WithCancel(context.Background())
-	err = node.Serve(c)
+	err = cluster.Serve(c)
 	if err != nil {
 		log.Printf("%s\n", err.Error())
 		return

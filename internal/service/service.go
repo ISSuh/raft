@@ -48,26 +48,27 @@ func (t *TestEntryHandler) EntryUpdated(log []byte) {
 }
 
 type RaftService struct {
-	config      config.Config
+	config      config.RaftConfig
 	node        *node.RaftNode
 	requester   net.ClusterRequester
 	transporter net.Transporter
 }
 
-func NewRaftService(config config.Config) *RaftService {
+func NewRaftService(config config.RaftConfig) *RaftService {
 	c := make(chan event.Event)
 	h := rpc.NewNodeRpcHandler(c)
-	t := rpc.NewRpcTransporter(config.Raft.Server.Address, h)
+	t := rpc.NewRpcTransporter(config.Server.Address, h)
+	m := node.NewPeerNodeManager(t)
 
 	metadata := &message.NodeMetadata{
-		Id: int32(config.Raft.Server.Id),
+		Id: int32(config.Server.Id),
 		Address: &message.Address{
-			Ip:   config.Raft.Server.Address.Ip,
-			Port: int32(config.Raft.Server.Address.Port),
+			Ip:   config.Server.Address.Ip,
+			Port: int32(config.Server.Address.Port),
 		},
 	}
 
-	node := node.NewRaftNode(metadata, c)
+	node := node.NewRaftNode(metadata, c, m)
 	s := &RaftService{
 		config:      config,
 		node:        node,
@@ -76,27 +77,29 @@ func NewRaftService(config config.Config) *RaftService {
 	return s
 }
 
-func (s *RaftService) Run(context context.Context) error {
+func (s *RaftService) Serve(context context.Context) error {
 	err := s.transporter.Serve(context)
 	if err != nil {
 		return err
 	}
 
-	s.requester, err = s.transporter.ConnectCluster(s.config.Raft.Cluster.Address)
+	s.node.Run(context)
+
+	s.requester, err = s.transporter.ConnectCluster(s.config.Cluster.Address)
 	if err != nil {
+		s.node.Stop()
 		return err
 	}
 
-	_, err = s.requester.NotifyMeToCluster(s.node.NodeMetaData())
+	peerNodes, err := s.requester.NotifyMeToCluster(s.node.NodeMetaData())
 	if err != nil {
+		s.node.Stop()
 		return err
 	}
 
+	if err := s.node.ConnectToPeerNode(peerNodes); err != nil {
+		s.node.Stop()
+		return err
+	}
 	return nil
-}
-
-func (s *RaftService) ConnectToPeers(peers map[int]string) error {
-}
-
-func (s *RaftService) ApplyEntries(entris [][]byte) {
 }

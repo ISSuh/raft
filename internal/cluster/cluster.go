@@ -27,6 +27,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/event"
@@ -36,27 +37,32 @@ import (
 )
 
 type RaftCluster struct {
-	config      config.Config
+	config      config.RaftConfig
 	manager     nodeManager
 	transporter net.Transporter
 
 	eventChannel chan event.Event
 }
 
-func NewRaftCluster(config config.Config) (*RaftCluster, error) {
+func NewRaftCluster(config config.RaftConfig) (*RaftCluster, error) {
 	eventChannel := make(chan event.Event)
 	handler := rpc.NewClusterRpcHandler(eventChannel)
 
 	return &RaftCluster{
 		config:       config,
 		manager:      NewNodeManager(),
-		transporter:  rpc.NewRpcTransporter(config, handler),
+		transporter:  rpc.NewRpcTransporter(config.Cluster.Address, handler),
 		eventChannel: eventChannel,
 	}, nil
 }
 
 func (c *RaftCluster) Serve(context context.Context) error {
-	return c.transporter.Serve(context)
+	if err := c.transporter.Serve(context); err != nil {
+		return err
+	}
+
+	go c.eventLoop(context)
+	return nil
 }
 
 func (c *RaftCluster) Stop() {
@@ -67,12 +73,12 @@ func (c *RaftCluster) eventLoop(context context.Context) {
 	for {
 		select {
 		case <-context.Done():
-			fmt.Printf("[RaftCluster.eventLoog] context canceled")
+			log.Printf("[RaftCluster.eventLoog] context canceled")
 			return
 		case e := <-c.eventChannel:
 			result, err := c.processEvent(e)
 			if err != nil {
-				fmt.Printf("[RaftCluster.eventLoog] err  %s", err.Error())
+				log.Printf("[RaftCluster.eventLoog] err  %s", err.Error())
 			}
 
 			e.EventResultChannel <- &event.EventResult{
@@ -87,8 +93,8 @@ func (c *RaftCluster) processEvent(e event.Event) (interface{}, error) {
 	var err error
 	var result interface{}
 	switch e.Type {
-	case event.ConnectNode:
-		result, err = c.onConnectToCluster(e)
+	case event.NotifyMeToCluster:
+		result, err = c.onNotifyMeToCluster(e)
 	case event.DeleteNode:
 		err = c.onDisconnect(e)
 	case event.NodeList:
@@ -97,10 +103,11 @@ func (c *RaftCluster) processEvent(e event.Event) (interface{}, error) {
 	return result, err
 }
 
-func (c *RaftCluster) onConnectToCluster(e event.Event) (*message.NodeMetadataesList, error) {
+func (c *RaftCluster) onNotifyMeToCluster(e event.Event) (*message.NodeMetadataesList, error) {
+	log.Printf("[RaftCluster.onNotifyMeToCluster]")
 	node, ok := e.Message.(*message.NodeMetadata)
 	if !ok {
-		return nil, fmt.Errorf("[RaftCluster.onConnectToCluster] can not convert to *message.NodeMetadata. %v", e)
+		return nil, fmt.Errorf("[RaftCluster.onNotifyMeToCluster] can not convert to *message.NodeMetadata. %v", e)
 	}
 
 	nodeList := c.manager.nodeList()
@@ -109,6 +116,7 @@ func (c *RaftCluster) onConnectToCluster(e event.Event) (*message.NodeMetadataes
 }
 
 func (c *RaftCluster) onDisconnect(e event.Event) error {
+	log.Printf("[RaftCluster.onDisconnect]")
 	node, ok := e.Message.(*message.NodeMetadata)
 	if !ok {
 		return fmt.Errorf("[RaftCluster.onDisconnect] can not convert to *message.NodeMetadata. %v", e)
@@ -119,5 +127,6 @@ func (c *RaftCluster) onDisconnect(e event.Event) error {
 }
 
 func (c *RaftCluster) onNodeList() (*message.NodeMetadataesList, error) {
+	log.Printf("[RaftCluster.onNodeList]")
 	return c.manager.nodeList(), nil
 }

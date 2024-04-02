@@ -24,16 +24,53 @@ SOFTWARE.
 
 package raft
 
+import (
+	"context"
+
+	"github.com/ISSuh/raft/internal/cluster"
+	"github.com/ISSuh/raft/internal/config"
+	"github.com/ISSuh/raft/internal/service"
+)
+
 type Cluster struct {
+	raftCluster *cluster.RaftCluster
 }
 
-func NewCluster() (*Cluster, error) {
-	return &Cluster{}, nil
+func NewCluster(path string) (*Cluster, error) {
+	c, err := config.NewRaftConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := cluster.NewRaftCluster(c.Raft)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Cluster{
+		raftCluster: r,
+	}, nil
+}
+
+func (c *Cluster) Serve(context context.Context) error {
+	return c.raftCluster.Serve(context)
 }
 
 type Node struct {
+	raftService *service.RaftService
 }
 
-func NewRaftNode() (*Node, error) {
-	return &Node{}, nil
+func NewRaftNode(path string) (*Node, error) {
+	c, err := config.NewRaftConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Node{
+		raftService: service.NewRaftService(c.Raft),
+	}, nil
+}
+
+func (n *Node) Serve(context context.Context) error {
+	return n.raftService.Serve(context)
 }

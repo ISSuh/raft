@@ -31,29 +31,17 @@ import (
 	"github.com/ISSuh/raft/internal/message"
 )
 
-type Responsor interface {
-	onConnectToPeer(peer *message.NodeMetadata)
-	onRequestVote(args *message.RequestVote, reply *message.RequestVoteReply)
-	onAppendEntries(args *message.AppendEntries, reply *message.AppendEntriesReply)
-	onApplyEntry(args *message.ApplyEntry)
-}
-
-type Requestor interface {
-	ConnectToPeer(arg *message.NodeMetadata, reply *bool) error
-	RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error
-	AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error
-}
-
 type NodeRequester interface {
 	HelthCheck() error
 	NotifyMeToPeerNode(myNode *message.NodeMetadata) (bool, error)
-	RequestVote(message *message.RequestVote) (*message.RequestVoteReply, error)
-	AppendEntries(message *message.AppendEntries) (*message.AppendEntriesReply, error)
+	Disconnect(myNode *message.NodeMetadata) error
+	RequestVote(requestVoteMessage *message.RequestVote) (*message.RequestVoteReply, error)
+	AppendEntries(appendEntriesMessaage *message.AppendEntries) (*message.AppendEntriesReply, error)
 }
 
 type ClusterRequester interface {
 	NotifyMeToCluster(myNode *message.NodeMetadata) (*message.NodeMetadataesList, error)
-	Disconnect(myNode *message.NodeMetadata) error
+	DisconnectNode(myNode *message.NodeMetadata) error
 	NodeList() (*message.NodeMetadataesList, error)
 }
 

@@ -63,8 +63,8 @@ func (r *RpcRequester) HelthCheck() error {
 	return r.client.Call(RpcMethodHandle, &req, &resp)
 }
 
-func (r *RpcRequester) NotifyMeToPeerNode(arg *message.NodeMetadata) (bool, error) {
-	data, err := proto.Marshal(arg)
+func (r *RpcRequester) NotifyMeToPeerNode(myNode *message.NodeMetadata) (bool, error) {
+	data, err := proto.Marshal(myNode)
 	if err != nil {
 		return false, err
 	}
@@ -88,8 +88,25 @@ func (r *RpcRequester) NotifyMeToPeerNode(arg *message.NodeMetadata) (bool, erro
 	return reply, nil
 }
 
-func (r *RpcRequester) RequestVote(arg *message.RequestVote) (*message.RequestVoteReply, error) {
-	data, err := proto.Marshal(arg)
+func (r *RpcRequester) Disconnect(myNode *message.NodeMetadata) error {
+	data, err := proto.Marshal(myNode)
+	if err != nil {
+		r.client.Close()
+		return err
+	}
+
+	req, resp := r.makeRpcRequestResponse(event.NotifyMeToNode, data)
+	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+		r.client.Close()
+		return err
+	}
+
+	r.client.Close()
+	return nil
+}
+
+func (r *RpcRequester) RequestVote(requestVoteMessage *message.RequestVote) (*message.RequestVoteReply, error) {
+	data, err := proto.Marshal(requestVoteMessage)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +173,7 @@ func (r *RpcRequester) NotifyMeToCluster(arg *message.NodeMetadata) (*message.No
 	return reply, nil
 }
 
-func (r *RpcRequester) Disconnect(arg *message.NodeMetadata) error {
+func (r *RpcRequester) DisconnectNode(arg *message.NodeMetadata) error {
 	data, err := proto.Marshal(arg)
 	if err != nil {
 		return err

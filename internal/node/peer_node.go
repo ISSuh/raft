@@ -30,19 +30,29 @@ import (
 )
 
 type RaftPeerNode struct {
-	id        int
-	address   string
-	requestor net.Requestor
+	metadata  *message.NodeMetadata
+	requestor net.NodeRequester
 }
 
-func (peer *RaftPeerNode) ConnectToPeer(my *message.NodeMetadata, reply *bool) error {
-	return peer.requestor.ConnectToPeer(arg, reply)
+func NewRaftPeerNode(metadata *message.NodeMetadata, requestor net.NodeRequester) *RaftPeerNode {
+	return &RaftPeerNode{
+		metadata:  metadata,
+		requestor: requestor,
+	}
 }
 
-func (peer *RaftPeerNode) RequestVote(arg *message.RequestVote, reply *message.RequestVoteReply) error {
-	return peer.requestor.RequestVote(arg, reply)
+func (n *RaftPeerNode) NotifyMeToPeerNode(message *message.NodeMetadata) (bool, error) {
+	return n.requestor.NotifyMeToPeerNode(message)
 }
 
-func (peer *RaftPeerNode) AppendEntries(arg *message.AppendEntries, reply *message.AppendEntriesReply) error {
-	return peer.requestor.AppendEntries(arg, reply)
+func (n *RaftPeerNode) RequestVote(message *message.RequestVote) (*message.RequestVoteReply, error) {
+	return n.requestor.RequestVote(message)
+}
+
+func (n *RaftPeerNode) AppendEntries(message *message.AppendEntries) (*message.AppendEntriesReply, error) {
+	return n.requestor.AppendEntries(message)
+}
+
+func (n *RaftPeerNode) Disconnect() error {
+	return n.requestor.Disconnect(n.metadata)
 }

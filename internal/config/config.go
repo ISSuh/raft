@@ -60,7 +60,7 @@ type Config struct {
 	Raft RaftConfig `yaml:"raft"`
 }
 
-func NewRaftConfig(path string) (*RaftConfig, error) {
+func NewRaftConfig(path string) (*Config, error) {
 	if len(path) == 0 {
 		return nil, errors.New("can not found config file")
 	}
@@ -70,7 +70,7 @@ func NewRaftConfig(path string) (*RaftConfig, error) {
 		return nil, err
 	}
 
-	config := new(RaftConfig)
+	config := new(Config)
 	if err = yaml.Unmarshal(buffer, config); err != nil {
 		return nil, nil
 	}
