@@ -37,7 +37,8 @@ type EventType int
 
 const (
 	// node  event
-	NotifyMeToNode EventType = iota
+	NotifyNodeConnected EventType = iota
+	NotifyNodeDisconnected
 	ReqeustVote
 	Timeout
 	VoteTimeout
@@ -54,8 +55,8 @@ const (
 
 func (t EventType) String() string {
 	switch t {
-	case NotifyMeToNode:
-		return "NotifyMeToNode"
+	case NotifyNodeConnected:
+		return "NotifyNodeConnected"
 	case ReqeustVote:
 		return "ReqeustVote"
 	case Timeout:

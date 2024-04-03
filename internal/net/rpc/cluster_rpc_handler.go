@@ -112,7 +112,7 @@ func (h *ClusterRpcHandler) processDeleteNodeEvent(req *RpcRequest, resp *RpcRes
 	}
 
 	resp.Id = req.Id
-	resp.Message = []byte{util.BooleanToByte(success)}
+	resp.Message = util.BooleanToByteSlice(success)
 	return nil
 }
 

@@ -28,11 +28,11 @@ import (
 	"fmt"
 	"math/rand"
 	"net/rpc"
-	"strconv"
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
+	"github.com/ISSuh/raft/internal/util"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -52,6 +52,10 @@ func NewClusterRequester(client *rpc.Client) net.ClusterRequester {
 	}
 }
 
+func (r *RpcRequester) Close() {
+	r.client.Close()
+}
+
 func (r *RpcRequester) HelthCheck() error {
 	req := RpcRequest{
 		Id:      rand.Uint32(),
@@ -63,13 +67,13 @@ func (r *RpcRequester) HelthCheck() error {
 	return r.client.Call(RpcMethodHandle, &req, &resp)
 }
 
-func (r *RpcRequester) NotifyMeToPeerNode(myNode *message.NodeMetadata) (bool, error) {
-	data, err := proto.Marshal(myNode)
+func (r *RpcRequester) NotifyNodeConnected(node *message.NodeMetadata) (bool, error) {
+	data, err := proto.Marshal(node)
 	if err != nil {
 		return false, err
 	}
 
-	req, resp := r.makeRpcRequestResponse(event.NotifyMeToNode, data)
+	req, resp := r.makeRpcRequestResponse(event.NotifyNodeConnected, data)
 	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
 		return false, err
 	}
@@ -80,28 +84,19 @@ func (r *RpcRequester) NotifyMeToPeerNode(myNode *message.NodeMetadata) (bool, e
 				req.Id, resp.Id,
 			)
 	}
-
-	reply, err := strconv.ParseBool(string(resp.Message))
-	if err != nil {
-		return false, err
-	}
-	return reply, nil
+	return util.BooleanByteSliceToBool(resp.Message), nil
 }
 
-func (r *RpcRequester) Disconnect(myNode *message.NodeMetadata) error {
-	data, err := proto.Marshal(myNode)
+func (r *RpcRequester) NotifyNodeDisconnected(node *message.NodeMetadata) error {
+	data, err := proto.Marshal(node)
 	if err != nil {
-		r.client.Close()
 		return err
 	}
 
-	req, resp := r.makeRpcRequestResponse(event.NotifyMeToNode, data)
+	req, resp := r.makeRpcRequestResponse(event.NotifyNodeDisconnected, data)
 	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
-		r.client.Close()
 		return err
 	}
-
-	r.client.Close()
 	return nil
 }
 
@@ -181,11 +176,6 @@ func (r *RpcRequester) DisconnectNode(arg *message.NodeMetadata) error {
 
 	req, resp := r.makeRpcRequestResponse(event.DeleteNode, data)
 	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
-		return err
-	}
-
-	_, err = strconv.ParseBool(string(resp.Message))
-	if err != nil {
 		return err
 	}
 	return nil

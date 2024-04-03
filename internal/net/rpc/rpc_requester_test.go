@@ -84,7 +84,7 @@ func (m *mockNodeRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
 	switch req.Type {
 	case event.HealthCheck:
 		err = m.HelthCheck(req, resp)
-	case event.NotifyMeToNode:
+	case event.NotifyNodeConnected:
 		err = m.processNotifyMeToNodeEvent(req, resp)
 	case event.ReqeustVote:
 		err = m.processRequestVoteEvent(req, resp)
@@ -111,7 +111,7 @@ func (m *mockNodeRpcHandler) HelthCheck(req *RpcRequest, resp *RpcResponse) erro
 }
 
 func (m *mockNodeRpcHandler) processNotifyMeToNodeEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.NotifyMeToNode] = true
+	m.Called[event.NotifyNodeConnected] = true
 	return nil
 }
 
@@ -183,7 +183,7 @@ func newTestRequester() (net.NodeRequester, error) {
 			Port: int32(testNodeConfig.Raft.Server.Address.Port),
 		},
 	}
-	return transporter.ConnectPeerNode(node)
+	return transporter.ConnectNode(node)
 }
 
 func TestMain(m *testing.M) {

@@ -32,31 +32,33 @@ import (
 )
 
 type PeerNodeManager struct {
-	nodes      map[int32]*RaftPeerNode
-	transpoter net.Transporter
+	nodeMetaData *message.NodeMetadata
+	nodes        map[int32]*RaftPeerNode
+	transpoter   net.Transporter
 }
 
-func NewPeerNodeManager(transpoter net.Transporter) PeerNodeManager {
+func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Transporter) PeerNodeManager {
 	return PeerNodeManager{
-		nodes:      map[int32]*RaftPeerNode{},
-		transpoter: transpoter,
+		nodeMetaData: nodeMetaData,
+		nodes:        map[int32]*RaftPeerNode{},
+		transpoter:   transpoter,
 	}
 }
 
-func (m *PeerNodeManager) RegistPeerNode(metadata *message.NodeMetadata) (*RaftPeerNode, error) {
-	requester, err := m.transpoter.ConnectPeerNode(metadata)
+func (m *PeerNodeManager) RegistPeerNode(metadata *message.NodeMetadata) error {
+	requester, err := m.transpoter.ConnectNode(metadata)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, exist := m.nodes[metadata.Id]
 	if exist {
-		return nil, fmt.Errorf("[PeerNodeManager.RegistPeerNode] node already exist. id : %d", metadata.Id)
+		return fmt.Errorf("[PeerNodeManager.RegistPeerNode] node already exist. id : %d", metadata.Id)
 	}
 
 	node := NewRaftPeerNode(metadata, requester)
 	m.nodes[metadata.Id] = node
-	return node, nil
+	return nil
 }
 
 func (m *PeerNodeManager) FindPeerNode(id int) (*RaftPeerNode, error) {
@@ -70,13 +72,14 @@ func (m *PeerNodeManager) FindPeerNode(id int) (*RaftPeerNode, error) {
 
 func (m *PeerNodeManager) RemovePeerNode(id int) {
 	key := int32(id)
-	m.nodes[key].Disconnect()
+	m.nodes[key].Close()
 	delete(m.nodes, key)
 }
 
-func (m *PeerNodeManager) RemoveAllPeerNode() {
+func (m *PeerNodeManager) NotifyDisconnectToAllPeerNode() {
 	for _, node := range m.nodes {
-		node.Disconnect()
+		node.NotifyNodeDisconnected(m.nodeMetaData)
+		node.Close()
 	}
 	m.nodes = make(map[int32]*RaftPeerNode)
 }

@@ -117,7 +117,7 @@ func (t *RpcTransporter) runServer(context context.Context) {
 	}()
 }
 
-func (t *RpcTransporter) ConnectPeerNode(node *message.NodeMetadata) (net.NodeRequester, error) {
+func (t *RpcTransporter) ConnectNode(node *message.NodeMetadata) (net.NodeRequester, error) {
 	ip := node.Address.Ip
 	port := strconv.Itoa(int(node.Address.Port))
 	if len(port) <= 1 {

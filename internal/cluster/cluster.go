@@ -45,15 +45,16 @@ type RaftCluster struct {
 }
 
 func NewRaftCluster(config config.RaftConfig) (*RaftCluster, error) {
-	eventChannel := make(chan event.Event)
-	handler := rpc.NewClusterRpcHandler(eventChannel)
-
-	return &RaftCluster{
+	e := make(chan event.Event)
+	h := rpc.NewClusterRpcHandler(e)
+	c := &RaftCluster{
 		config:       config,
-		manager:      NewNodeManager(),
-		transporter:  rpc.NewRpcTransporter(config.Cluster.Address, handler),
-		eventChannel: eventChannel,
-	}, nil
+		transporter:  rpc.NewRpcTransporter(config.Cluster.Address, h),
+		eventChannel: e,
+	}
+
+	c.manager = NewNodeManager(c.onHealthCheckFail)
+	return c, nil
 }
 
 func (c *RaftCluster) Serve(context context.Context) error {
@@ -105,14 +106,47 @@ func (c *RaftCluster) processEvent(e event.Event) (interface{}, error) {
 
 func (c *RaftCluster) onNotifyMeToCluster(e event.Event) (*message.NodeMetadataesList, error) {
 	log.Printf("[RaftCluster.onNotifyMeToCluster]")
-	node, ok := e.Message.(*message.NodeMetadata)
+	newNode, ok := e.Message.(*message.NodeMetadata)
 	if !ok {
 		return nil, fmt.Errorf("[RaftCluster.onNotifyMeToCluster] can not convert to *message.NodeMetadata. %v", e)
 	}
 
+	// connect each other
+	requester, err := c.transporter.ConnectNode(newNode)
+	if err != nil {
+		return nil, err
+	}
+
+	// notify new node connect to other node
+	// make NodeMetadataesList message
+	nodeListMessage := &message.NodeMetadataesList{
+		Nodes: make([]*message.NodeMetadata, 0),
+	}
+
 	nodeList := c.manager.nodeList()
-	c.manager.addNode(node)
-	return nodeList, nil
+	for _, node := range nodeList {
+		success, err := node.Requester.NotifyNodeConnected(newNode)
+		if err != nil {
+			return nil, err
+		}
+
+		if !success {
+			return nil,
+				fmt.Errorf(
+					"[RaftCluster.onNotifyMeToCluster] fail NotifyNodeConnected. newnode : %d, node : %d",
+					newNode.Id, node.Metadata.Id,
+				)
+		}
+
+		nodeListMessage.Nodes = append(nodeListMessage.Nodes, node.Metadata)
+	}
+
+	// add node to node manager
+	err = c.manager.addNode(newNode, requester)
+	if err != nil {
+		return nil, err
+	}
+	return nodeListMessage, nil
 }
 
 func (c *RaftCluster) onDisconnect(e event.Event) error {
@@ -122,11 +156,44 @@ func (c *RaftCluster) onDisconnect(e event.Event) error {
 		return fmt.Errorf("[RaftCluster.onDisconnect] can not convert to *message.NodeMetadata. %v", e)
 	}
 
-	c.manager.removeNode(int(node.Id))
+	if err := c.manager.removeNode(int(node.Id)); err != nil {
+		return err
+	}
+
+	if err := c.notifyNodeDisconnectToAll(node); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (c *RaftCluster) onNodeList() (*message.NodeMetadataesList, error) {
 	log.Printf("[RaftCluster.onNodeList]")
-	return c.manager.nodeList(), nil
+	list := &message.NodeMetadataesList{
+		Nodes: make([]*message.NodeMetadata, 0),
+	}
+
+	nodeList := c.manager.nodeList()
+	for _, node := range nodeList {
+		list.Nodes = append(list.Nodes, node.Metadata)
+	}
+	return list, nil
+}
+
+func (c *RaftCluster) notifyNodeDisconnectToAll(disconnectedNode *message.NodeMetadata) error {
+	log.Printf("[RaftCluster.notifyNodeDisconnectToAll]")
+
+	var err error = nil
+	nodeList := c.manager.nodeList()
+	for _, node := range nodeList {
+		if subErr := node.Requester.NotifyNodeDisconnected(disconnectedNode); subErr != nil {
+			log.Printf("[RaftCluster.notifyNodeDisconnectToAll] %s", subErr.Error())
+			err = subErr
+		}
+	}
+	return err
+}
+
+func (c *RaftCluster) onHealthCheckFail(node *message.NodeMetadata) {
+	log.Printf("[RaftCluster.onHealthCheckFail] node : %v", node)
+	c.notifyNodeDisconnectToAll(node)
 }

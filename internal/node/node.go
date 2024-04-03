@@ -58,18 +58,9 @@ func (n *RaftNode) NodeMetaData() *message.NodeMetadata {
 
 func (n *RaftNode) ConnectToPeerNode(peerNodes *message.NodeMetadataesList) error {
 	for _, peerNode := range peerNodes.Nodes {
-		peerNode, err := n.peerNodeManager.RegistPeerNode(peerNode)
+		err := n.peerNodeManager.RegistPeerNode(peerNode)
 		if err != nil {
 			return err
-		}
-
-		success, err := peerNode.NotifyMeToPeerNode(n.metadata)
-		if err != nil {
-			return err
-		}
-
-		if !success {
-			return fmt.Errorf("[RaftNode.ConnectToPeerNode] can not connect to peer node\n")
 		}
 	}
 	return nil
@@ -110,8 +101,10 @@ func (n *RaftNode) processEvent(e event.Event) (interface{}, error) {
 	var result interface{}
 	var err error
 	switch e.Type {
-	case event.NotifyMeToNode:
-		result, err = n.onnNtifyMeToNode(e)
+	case event.NotifyNodeConnected:
+		result, err = n.onNotifyNodeConnected(e)
+	case event.NotifyNodeDisconnected:
+		result, err = n.onNotifyNodeDisconnected(e)
 	default:
 		result = nil
 		err = fmt.Errorf("[RaftNode.processEvent] invalid event type. type : %s", e.Type.String())
@@ -119,21 +112,28 @@ func (n *RaftNode) processEvent(e event.Event) (interface{}, error) {
 	return result, err
 }
 
-func (n *RaftNode) onnNtifyMeToNode(e event.Event) (interface{}, error) {
-	log.Printf("[RaftNode.onnNtifyMeToNode]")
+func (n *RaftNode) onNotifyNodeConnected(e event.Event) (bool, error) {
+	log.Printf("[RaftNode.onNotifyNodeConnected]")
 	node, ok := e.Message.(*message.NodeMetadata)
 	if !ok {
-		return nil, fmt.Errorf("[RaftNode.onnNtifyMeToNode] can not convert to *message.NodeMetadata. %v", e)
+		return false, fmt.Errorf("[RaftNode.onNotifyNodeConnected] can not convert to *message.NodeMetadata. %v", e)
 	}
 
-	peerNode, err := n.peerNodeManager.RegistPeerNode(node)
+	err := n.peerNodeManager.RegistPeerNode(node)
 	if err != nil {
-		return nil, err
+		return false, err
+	}
+	return true, nil
+}
+
+func (n *RaftNode) onNotifyNodeDisconnected(e event.Event) (bool, error) {
+	log.Printf("[RaftNode.onNotifyNodeDisconnected]")
+	node, ok := e.Message.(*message.NodeMetadata)
+	if !ok {
+		return false, fmt.Errorf("[RaftNode.onNotifyNodeDisconnected] can not convert to *message.NodeMetadata. %v", e)
 	}
 
-	success, err := peerNode.NotifyMeToPeerNode(n.metadata)
-	if err != nil {
-		return nil, err
-	}
-	return success, err
+	log.Printf("[RaftNode.onNotifyNodeDisconnected] remove peer node.  %+v", node)
+	n.peerNodeManager.RemovePeerNode(int(node.Id))
+	return true, nil
 }

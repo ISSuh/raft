@@ -32,9 +32,14 @@ import (
 )
 
 type NodeRequester interface {
+	Close()
+
+	// call by cluster
 	HelthCheck() error
-	NotifyMeToPeerNode(myNode *message.NodeMetadata) (bool, error)
-	Disconnect(myNode *message.NodeMetadata) error
+	NotifyNodeConnected(node *message.NodeMetadata) (bool, error)
+	NotifyNodeDisconnected(node *message.NodeMetadata) error
+
+	// call by node
 	RequestVote(requestVoteMessage *message.RequestVote) (*message.RequestVoteReply, error)
 	AppendEntries(appendEntriesMessaage *message.AppendEntries) (*message.AppendEntriesReply, error)
 }
@@ -48,6 +53,6 @@ type ClusterRequester interface {
 type Transporter interface {
 	Serve(context context.Context) error
 	StopAndWait()
-	ConnectPeerNode(peerMode *message.NodeMetadata) (NodeRequester, error)
+	ConnectNode(peerMode *message.NodeMetadata) (NodeRequester, error)
 	ConnectCluster(address config.Address) (ClusterRequester, error)
 }

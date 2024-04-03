@@ -25,47 +25,72 @@ SOFTWARE.
 package cluster
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 )
 
+const (
+	HealthCheckTimer        = 1 * time.Second
+	HealthCheckMaxFailCount = 5
+)
+
+type HealthCheckFailCallback func(*message.NodeMetadata)
+
 type node struct {
-	requester net.NodeRequester
-	metadata  *message.NodeMetadata
+	Metadata              *message.NodeMetadata
+	Requester             net.NodeRequester
+	HealthCheckRetryCount int
 }
 
-type nodeMap map[int]*message.NodeMetadata
+type nodeMap map[int]*node
 
 type nodeManager struct {
-	nodes nodeMap
+	nodes           nodeMap
+	quitHealthCheck map[int]chan struct{}
+	callback        HealthCheckFailCallback
 }
 
-func NewNodeManager() nodeManager {
+func NewNodeManager(callback HealthCheckFailCallback) nodeManager {
 	return nodeManager{
-		nodes: make(nodeMap),
+		nodes:           make(nodeMap),
+		quitHealthCheck: make(map[int]chan struct{}),
+		callback:        callback,
 	}
 }
 
-func (n *nodeManager) addNode(meta *message.NodeMetadata) error {
+func (n *nodeManager) addNode(meta *message.NodeMetadata, requester net.NodeRequester) error {
 	id := int(meta.Id)
-	n.nodes[id] = meta
-	return nil
-}
-
-func (n *nodeManager) removeNode(nodeId int) error {
-	_, exist := n.nodes[nodeId]
-	if !exist {
-		return fmt.Errorf("[%d] node not exist.", nodeId)
+	n.nodes[id] = &node{
+		Metadata:  meta,
+		Requester: requester,
 	}
 
-	delete(n.nodes, nodeId)
+	n.quitHealthCheck[id] = make(chan struct{})
+
+	go n.backgroundHealthCheck(id)
 	return nil
 }
 
-func (n *nodeManager) findNode(nodeId int) (*message.NodeMetadata, error) {
+func (n *nodeManager) removeNode(id int) error {
+	_, exist := n.nodes[id]
+	if !exist {
+		return fmt.Errorf("[%d] node not exist.", id)
+	}
+
+	n.quitHealthCheck[id] <- struct{}{}
+
+	close(n.quitHealthCheck[id])
+	delete(n.quitHealthCheck, id)
+	delete(n.nodes, id)
+	return nil
+}
+
+func (n *nodeManager) findNode(nodeId int) (*node, error) {
 	node, exist := n.nodes[nodeId]
 	if !exist {
 		return nil, fmt.Errorf("[%d] node not exist.", nodeId)
@@ -73,14 +98,58 @@ func (n *nodeManager) findNode(nodeId int) (*message.NodeMetadata, error) {
 	return node, nil
 }
 
-func (n *nodeManager) nodeList() *message.NodeMetadataesList {
-	list := &message.NodeMetadataesList{
-		Nodes: make([]*message.NodeMetadata, 0),
+func (n *nodeManager) nodeList() []*node {
+	nodeList := []*node{}
+	for _, node := range n.nodes {
+		nodeList = append(nodeList, node)
+	}
+	return nodeList
+}
+
+func (n *nodeManager) backgroundHealthCheck(id int) {
+	ticker := time.NewTicker(HealthCheckTimer)
+	for {
+		select {
+		case <-n.quitHealthCheck[id]:
+			return
+		case <-ticker.C:
+			if err := n.nodeHealthChecking(id); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (n *nodeManager) nodeHealthChecking(id int) error {
+	node, exist := n.nodes[id]
+	if !exist {
+		return fmt.Errorf("[nodeManager.nodeHealthChecking] node not exist. id : %d", id)
 	}
 
-	for _, node := range n.nodes {
-		log.Printf("[TEST]node : %+v\n", node)
-		list.Nodes = append(list.Nodes, node)
+	if err := node.Requester.HelthCheck(); err != nil {
+		if node.HealthCheckRetryCount < HealthCheckMaxFailCount {
+			node.HealthCheckRetryCount++
+			log.Printf(
+				"[nodeManager.nodeHealthChecking] %d node healcheck fall. retry [%d/%d] %s",
+				id, node.HealthCheckRetryCount, HealthCheckMaxFailCount, err.Error(),
+			)
+			return nil
+		} else {
+			node.Requester.Close()
+			close(n.quitHealthCheck[id])
+			delete(n.quitHealthCheck, id)
+			delete(n.nodes, id)
+
+			n.callback(node.Metadata)
+			return errors.Join(
+				err,
+				fmt.Errorf("[nodeManager.nodeHealthChecking] %d node healcheck fall and retry over %d. will disconnect.",
+					id, HealthCheckMaxFailCount,
+				),
+			)
+		}
 	}
-	return list
+
+	node.HealthCheckRetryCount = 0
+	return nil
 }

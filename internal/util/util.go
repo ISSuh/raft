@@ -73,9 +73,16 @@ func Max(a, b int64) int64 {
 	return b
 }
 
-func BooleanToByte(value bool) byte {
+func BooleanToByteSlice(value bool) []byte {
 	if value {
-		return byte(1)
+		return []byte{1}
 	}
-	return byte(0)
+	return []byte{0}
+}
+
+func BooleanByteSliceToBool(value []byte) bool {
+	if len(value) > 0 && value[0] > 0 {
+		return true
+	}
+	return false
 }

@@ -44,13 +44,14 @@ func NewNodeRpcHandler(eventChannel chan event.Event) RpcHandler {
 }
 
 func (h *NodeRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
-	fmt.Printf("[NodeRpcHandler.Handle]\n")
 	var err error
 	switch req.Type {
 	case event.HealthCheck:
 		err = h.HelthCheck(req, resp)
-	case event.NotifyMeToNode:
-		err = h.procesNotifyMeToNodeEvent(req, resp)
+	case event.NotifyNodeConnected:
+		err = h.procesNotifyNodeConnectedEvent(req, resp)
+	case event.NotifyNodeDisconnected:
+		err = h.procesNotifyNodeDisconnectedEvent(req, resp)
 	case event.ReqeustVote:
 		err = h.processRequestVoteEvent(req, resp)
 	case event.AppendEntries:
@@ -69,40 +70,76 @@ func (h *NodeRpcHandler) HelthCheck(req *RpcRequest, resp *RpcResponse) error {
 	return nil
 }
 
-func (h *NodeRpcHandler) procesNotifyMeToNodeEvent(req *RpcRequest, resp *RpcResponse) error {
+func (h *NodeRpcHandler) procesNotifyNodeConnectedEvent(req *RpcRequest, resp *RpcResponse) error {
 	message := &message.NodeMetadata{}
 	err := proto.Unmarshal(req.Message, message)
 	if err != nil {
-		return fmt.Errorf("[ClusterRpcHandler.procesNotifyMeToNodeEvent] invalid message. %v\n", req.Message)
+		return fmt.Errorf("[NodeRpcHandler.procesNotifyNodeConnectedEvent] invalid message. %v\n", req.Message)
 	}
 
-	success, err := h.notifyMeToNode(message)
+	success, err := h.notifyNodeConnected(message)
 	if err != nil {
 		return err
 	}
 
 	resp.Id = req.Id
-	resp.Message = []byte{util.BooleanToByte(success)}
+	resp.Message = util.BooleanToByteSlice(success)
 	return nil
 }
 
-func (h *NodeRpcHandler) notifyMeToNode(node *message.NodeMetadata) (bool, error) {
-	fmt.Printf("[NodeRpcHandler.notifyMeToNode]\n")
+func (h *NodeRpcHandler) notifyNodeConnected(node *message.NodeMetadata) (bool, error) {
+	fmt.Printf("[NodeRpcHandler.notifyNodeConnected]\n")
 
-	eventResult, err := h.notifyEvent(event.NotifyMeToNode, node)
+	eventResult, err := h.notifyEvent(event.NotifyNodeConnected, node)
 	if err != nil {
 		return false, err
 	}
 
-	result, ok := eventResult.Result.(*bool)
+	result, ok := eventResult.Result.(bool)
 	if !ok {
-		return false, fmt.Errorf("[NodeRpcHandler.notifyMeToNode] invalid event response. %v\n", eventResult)
+		return false, fmt.Errorf("[NodeRpcHandler.notifyNodeConnected] invalid event result. eventResult : %v\n", eventResult)
 	}
 
 	if eventResult.Err != nil {
 		return false, eventResult.Err
 	}
-	return *result, eventResult.Err
+	return result, eventResult.Err
+}
+
+func (h *NodeRpcHandler) procesNotifyNodeDisconnectedEvent(req *RpcRequest, resp *RpcResponse) error {
+	message := &message.NodeMetadata{}
+	err := proto.Unmarshal(req.Message, message)
+	if err != nil {
+		return fmt.Errorf("[NodeRpcHandler.procesNotifyNodeDisconnectedEvent] invalid message. %v\n", req.Message)
+	}
+
+	success, err := h.notifyNodeDisconnected(message)
+	if err != nil {
+		return err
+	}
+
+	resp.Id = req.Id
+	resp.Message = util.BooleanToByteSlice(success)
+	return nil
+}
+
+func (h *NodeRpcHandler) notifyNodeDisconnected(node *message.NodeMetadata) (bool, error) {
+	fmt.Printf("[NodeRpcHandler.notifyNodeDisconnected]\n")
+
+	eventResult, err := h.notifyEvent(event.NotifyNodeDisconnected, node)
+	if err != nil {
+		return false, err
+	}
+
+	result, ok := eventResult.Result.(bool)
+	if !ok {
+		return false, fmt.Errorf("[NodeRpcHandler.notifyNodeDisconnected] invalid event result. eventResult : %v\n", eventResult)
+	}
+
+	if eventResult.Err != nil {
+		return false, eventResult.Err
+	}
+	return result, eventResult.Err
 }
 
 func (h *NodeRpcHandler) processRequestVoteEvent(req *RpcRequest, resp *RpcResponse) error {
@@ -137,7 +174,7 @@ func (h *NodeRpcHandler) RequestVote(requestVoteMessage *message.RequestVote) (*
 
 	result, ok := eventResult.Result.(*message.RequestVoteReply)
 	if !ok {
-		return nil, fmt.Errorf("[NodeRpcHandler.RequestVote] invalid event response. %v\n", eventResult)
+		return nil, fmt.Errorf("[NodeRpcHandler.RequestVote] invalid event result. eventResult. %v\n", eventResult)
 	}
 	return result, eventResult.Err
 }
@@ -174,7 +211,7 @@ func (h *NodeRpcHandler) AppendEntries(appendEntriesMessage *message.AppendEntri
 
 	result, ok := eventResult.Result.(*message.AppendEntriesReply)
 	if !ok {
-		return nil, fmt.Errorf("[NodeRpcHandler.AppendEntries] invalid event response. %v\n", eventResult)
+		return nil, fmt.Errorf("[NodeRpcHandler.AppendEntries] invalid event result. eventResult. %v\n", eventResult)
 	}
 	return result, eventResult.Err
 }
@@ -192,7 +229,7 @@ func (h *NodeRpcHandler) processApplyEntryEvent(req *RpcRequest, resp *RpcRespon
 	}
 
 	resp.Id = req.Id
-	resp.Message = []byte{util.BooleanToByte(success)}
+	resp.Message = util.BooleanToByteSlice(success)
 	return nil
 }
 
@@ -206,7 +243,7 @@ func (h *NodeRpcHandler) ApplyEntry(applyEntryMessage *message.ApplyEntry) (bool
 
 	result, ok := eventResult.Result.(*bool)
 	if !ok {
-		return false, fmt.Errorf("[NodeRpcHandler.ApplyEntry] invalid event response. %v\n", eventResult)
+		return false, fmt.Errorf("[NodeRpcHandler.ApplyEntry] invalid event result. eventResult. %v\n", eventResult)
 	}
 
 	if eventResult.Err != nil {

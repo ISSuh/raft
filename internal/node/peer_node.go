@@ -41,8 +41,12 @@ func NewRaftPeerNode(metadata *message.NodeMetadata, requestor net.NodeRequester
 	}
 }
 
-func (n *RaftPeerNode) NotifyMeToPeerNode(message *message.NodeMetadata) (bool, error) {
-	return n.requestor.NotifyMeToPeerNode(message)
+func (n *RaftPeerNode) NotifyNodeConnected(message *message.NodeMetadata) (bool, error) {
+	return n.requestor.NotifyNodeConnected(message)
+}
+
+func (n *RaftPeerNode) NotifyNodeDisconnected(message *message.NodeMetadata) error {
+	return n.requestor.NotifyNodeDisconnected(n.metadata)
 }
 
 func (n *RaftPeerNode) RequestVote(message *message.RequestVote) (*message.RequestVoteReply, error) {
@@ -53,6 +57,6 @@ func (n *RaftPeerNode) AppendEntries(message *message.AppendEntries) (*message.A
 	return n.requestor.AppendEntries(message)
 }
 
-func (n *RaftPeerNode) Disconnect() error {
-	return n.requestor.Disconnect(n.metadata)
+func (n *RaftPeerNode) Close() {
+	n.requestor.Close()
 }
