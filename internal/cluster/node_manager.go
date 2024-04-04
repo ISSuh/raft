@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	HealthCheckTimer        = 1 * time.Second
-	HealthCheckMaxFailCount = 5
+	HealthCheckTimer        = 500 * time.Millisecond
+	HealthCheckMaxFailCount = 3
 )
 
 type HealthCheckFailCallback func(*message.NodeMetadata)

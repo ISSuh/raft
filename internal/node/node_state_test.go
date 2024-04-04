@@ -33,22 +33,22 @@ import (
 
 func TestNewNodeState(t *testing.T) {
 	nodeState := NewNodeState()
-	assert.Equal(t, nodeState.state, FOLLOWER)
+	assert.Equal(t, nodeState.state, FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 }
 
 func TestSetState(t *testing.T) {
 	nodeState := NewNodeState()
-	assert.Equal(t, nodeState.currentState(), FOLLOWER)
+	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
-	nodeState.setState(CANDIDATE)
-	assert.Equal(t, nodeState.currentState(), CANDIDATE)
+	nodeState.setState(CandidateState)
+	assert.Equal(t, nodeState.currentState(), CandidateState)
 }
 
 func TestSetTerm(t *testing.T) {
 	nodeState := NewNodeState()
-	assert.Equal(t, nodeState.currentState(), FOLLOWER)
+	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
 	nodeState.setTerm(100)
@@ -57,7 +57,7 @@ func TestSetTerm(t *testing.T) {
 
 func TestInscreaseTerm(t *testing.T) {
 	nodeState := NewNodeState()
-	assert.Equal(t, nodeState.currentState(), FOLLOWER)
+	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
 	nodeState.increaseTerm()
@@ -66,7 +66,7 @@ func TestInscreaseTerm(t *testing.T) {
 
 func TestConcurrencyIncrease(t *testing.T) {
 	nodeState := NewNodeState()
-	assert.Equal(t, nodeState.currentState(), FOLLOWER)
+	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
 	wg := &sync.WaitGroup{}

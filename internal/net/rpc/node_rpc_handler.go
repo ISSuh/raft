@@ -34,12 +34,14 @@ import (
 )
 
 type NodeRpcHandler struct {
-	eventChannel chan event.Event
+	nodeEventChan    chan event.Event
+	clusterEventChan chan event.Event
 }
 
-func NewNodeRpcHandler(eventChannel chan event.Event) RpcHandler {
+func NewNodeRpcHandler(nodeEventChan chan event.Event, clusterEventChan chan event.Event) RpcHandler {
 	return &NodeRpcHandler{
-		eventChannel: eventChannel,
+		nodeEventChan:    nodeEventChan,
+		clusterEventChan: clusterEventChan,
 	}
 }
 
@@ -236,7 +238,7 @@ func (h *NodeRpcHandler) processApplyEntryEvent(req *RpcRequest, resp *RpcRespon
 func (h *NodeRpcHandler) ApplyEntry(applyEntryMessage *message.ApplyEntry) (bool, error) {
 	fmt.Printf("[NodeRpcHandler.ApplyEntry]\n")
 
-	eventResult, err := h.notifyEvent(event.ReqeustVote, applyEntryMessage)
+	eventResult, err := h.notifyEvent(event.ApplyEntry, applyEntryMessage)
 	if err != nil {
 		return false, err
 	}
@@ -253,8 +255,18 @@ func (h *NodeRpcHandler) ApplyEntry(applyEntryMessage *message.ApplyEntry) (bool
 }
 
 func (h *NodeRpcHandler) notifyEvent(eventType event.EventType, message interface{}) (*event.EventResult, error) {
+	var eventChan chan event.Event
+	switch eventType {
+	case event.NotifyNodeConnected:
+		fallthrough
+	case event.NotifyNodeDisconnected:
+		eventChan = h.clusterEventChan
+	default:
+		eventChan = h.nodeEventChan
+	}
+
 	e := event.NewEvent(eventType, message)
-	result, err := e.Notify(h.eventChannel)
+	result, err := e.Notify(eventChan)
 	if err != nil {
 		return nil, err
 	}

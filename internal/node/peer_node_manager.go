@@ -26,6 +26,9 @@ package node
 
 import (
 	"fmt"
+	"log"
+	"sync"
+	"sync/atomic"
 
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
@@ -33,53 +36,105 @@ import (
 
 type PeerNodeManager struct {
 	nodeMetaData *message.NodeMetadata
-	nodes        map[int32]*RaftPeerNode
+	nodes        sync.Map
+	nodeNum      int32
 	transpoter   net.Transporter
 }
 
-func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Transporter) PeerNodeManager {
-	return PeerNodeManager{
+// map[int32]*RaftPeerNode{}
+func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Transporter) *PeerNodeManager {
+	return &PeerNodeManager{
 		nodeMetaData: nodeMetaData,
-		nodes:        map[int32]*RaftPeerNode{},
+		nodes:        sync.Map{},
+		nodeNum:      0,
 		transpoter:   transpoter,
 	}
 }
 
-func (m *PeerNodeManager) RegistPeerNode(metadata *message.NodeMetadata) error {
+func (m *PeerNodeManager) registPeerNode(metadata *message.NodeMetadata) error {
 	requester, err := m.transpoter.ConnectNode(metadata)
 	if err != nil {
 		return err
 	}
 
-	_, exist := m.nodes[metadata.Id]
+	_, exist := m.nodes.Load(metadata.Id)
 	if exist {
-		return fmt.Errorf("[PeerNodeManager.RegistPeerNode] node already exist. id : %d", metadata.Id)
+		return fmt.Errorf("[PeerNodeManager.registPeerNode] node already exist. id : %d", metadata.Id)
 	}
 
 	node := NewRaftPeerNode(metadata, requester)
-	m.nodes[metadata.Id] = node
+	m.nodes.Store(metadata.Id, node)
+
+	atomic.AddInt32(&m.nodeNum, 1)
 	return nil
 }
 
-func (m *PeerNodeManager) FindPeerNode(id int) (*RaftPeerNode, error) {
+func (m *PeerNodeManager) findAll() []*RaftPeerNode {
+	nodes := []*RaftPeerNode{}
+	m.nodes.Range(func(_, value any) bool {
+		node, ok := value.(*RaftPeerNode)
+		if !ok {
+			log.Printf("[PeerNodeManager.removePeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
+		}
+
+		nodes = append(nodes, node)
+		return true
+	})
+	return nodes
+}
+
+func (m *PeerNodeManager) findPeerNode(id int) (*RaftPeerNode, error) {
 	key := int32(id)
-	node, ok := m.nodes[key]
+	value, exist := m.nodes.Load(key)
+	if !exist {
+		return nil, fmt.Errorf("[PeerNodeManager.findPeerNode] not found peer node. id : %d", id)
+	}
+
+	node, ok := value.(*RaftPeerNode)
 	if !ok {
-		return nil, fmt.Errorf("[PeerNodeManager.RemovePeerNode] ]not found peer node. id : %d", id)
+		return nil, fmt.Errorf("[PeerNodeManager.findPeerNode] can not convert value to RaftPeerNode. value : %v", value)
 	}
 	return node, nil
 }
 
-func (m *PeerNodeManager) RemovePeerNode(id int) {
+func (m *PeerNodeManager) removePeerNode(id int) {
 	key := int32(id)
-	m.nodes[key].Close()
-	delete(m.nodes, key)
+	value, exist := m.nodes.Load(key)
+	if !exist {
+		log.Printf("[PeerNodeManager.removePeerNode] not found peer node. id : %d\n", id)
+		return
+	}
+
+	node, ok := value.(*RaftPeerNode)
+	if !ok {
+		log.Printf("[PeerNodeManager.removePeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
+	}
+
+	node.Close()
+	m.nodes.Delete(key)
+
+	atomic.AddInt32(&m.nodeNum, 1)
 }
 
-func (m *PeerNodeManager) NotifyDisconnectToAllPeerNode() {
-	for _, node := range m.nodes {
+func (m *PeerNodeManager) notifyDisconnectToAllPeerNode() {
+	m.nodes.Range(func(key, value any) bool {
+		node, ok := value.(*RaftPeerNode)
+		if !ok {
+			log.Printf("[PeerNodeManager.notifyDisconnectToAllPeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
+			return false
+		}
+
 		node.NotifyNodeDisconnected(m.nodeMetaData)
 		node.Close()
-	}
-	m.nodes = make(map[int32]*RaftPeerNode)
+		return true
+	})
+
+	// clear peer nodes
+	m.nodes = sync.Map{}
+	atomic.StoreInt32(&m.nodeNum, 0)
+}
+
+func (m *PeerNodeManager) numberOfPeer() int {
+	num := atomic.LoadInt32(&m.nodeNum)
+	return int(num)
 }

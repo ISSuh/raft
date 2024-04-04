@@ -43,6 +43,16 @@ func Timer(min time.Duration, max time.Duration) <-chan time.Time {
 	return time.After(target)
 }
 
+func Ticker(min time.Duration, max time.Duration) *time.Ticker {
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	target := min
+	duration := max - min
+	if duration > 0 {
+		target += time.Duration(rand.Int63n(int64(duration)))
+	}
+	return time.NewTicker(target)
+}
+
 func GoId() int {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)

@@ -31,11 +31,25 @@ import (
 type State uint32
 
 const (
-	STOP State = iota
-	FOLLOWER
-	CANDIDATE
-	LEADER
+	StopState State = iota
+	FollowerState
+	CandidateState
+	LeaderState
 )
+
+func (s State) String() string {
+	switch s {
+	case StopState:
+		return "Stop"
+	case FollowerState:
+		return "Follower"
+	case CandidateState:
+		return "Candidate"
+	case LeaderState:
+		return "Leader"
+	}
+	return "invalid state"
+}
 
 type NodeState struct {
 	state State
@@ -43,7 +57,7 @@ type NodeState struct {
 }
 
 func NewNodeState() *NodeState {
-	return &NodeState{state: FOLLOWER, term: 0}
+	return &NodeState{state: FollowerState, term: 0}
 }
 
 func (nodeState *NodeState) currentState() State {

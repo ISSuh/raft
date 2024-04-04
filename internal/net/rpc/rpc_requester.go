@@ -131,7 +131,7 @@ func (r *RpcRequester) AppendEntries(arg *message.AppendEntries) (*message.Appen
 		return nil, err
 	}
 
-	req, resp := r.makeRpcRequestResponse(event.ReqeustVote, data)
+	req, resp := r.makeRpcRequestResponse(event.AppendEntries, data)
 	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
 		return nil, err
 	}
