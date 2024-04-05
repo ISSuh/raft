@@ -40,7 +40,7 @@ const (
 	DefaultElectionMinTimeout = 150 * time.Millisecond
 	DefaultElectionMaxTimeout = 300 * time.Millisecond
 
-	DefaultHeartBeatMinTimeout = 100 * time.Millisecond
+	DefaultHeartBeatMinTimeout = 50 * time.Millisecond
 	DefaultHeartBeatMaxTimeout = 150 * time.Millisecond
 )
 
@@ -54,6 +54,7 @@ type RaftNode struct {
 
 	leaderId  int32
 	workGroup sync.WaitGroup
+	timer     *time.Timer
 
 	quit chan struct{}
 }
@@ -68,6 +69,8 @@ func NewRaftNode(
 		clusterEventChan: clusterEventChan,
 		peerNodeManager:  peerNodeManager,
 		leaderId:         -1,
+		workGroup:        sync.WaitGroup{},
+		timer:            nil,
 		quit:             make(chan struct{}, 2),
 	}
 }
@@ -178,15 +181,16 @@ func (n *RaftNode) onNotifyNodeDisconnected(e event.Event) (bool, error) {
 	}
 
 	log.Printf("[RaftNode.onNotifyNodeDisconnected] remove peer node.  %+v", node)
-	n.peerNodeManager.removePeerNode(int(node.Id))
+	n.peerNodeManager.removePeerNode(node.Id)
 	return true, nil
 }
 
 func (n *RaftNode) followerStateLoop(c context.Context) {
 	log.Printf("[RaftNode.followerStateLoop]")
-	timeout := util.Timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
-
 	for n.currentState() == FollowerState {
+		timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+		n.timer = time.NewTimer(timeout)
+
 		select {
 		case <-c.Done():
 			log.Printf("[RaftNode.followerStateLoop] context done\n")
@@ -194,7 +198,7 @@ func (n *RaftNode) followerStateLoop(c context.Context) {
 		case <-n.quit:
 			log.Printf("[RaftNode.followerStateLoop] force quit\n")
 			n.setState(StopState)
-		case <-timeout:
+		case <-n.timer.C:
 			n.setState(CandidateState)
 		case e := <-n.nodeEventChan:
 			result, err := n.processNodeEvent(e)
@@ -206,8 +210,6 @@ func (n *RaftNode) followerStateLoop(c context.Context) {
 				Err:    err,
 				Result: result,
 			}
-
-			// TODO : need timer reset
 		}
 	}
 }
@@ -215,7 +217,6 @@ func (n *RaftNode) followerStateLoop(c context.Context) {
 func (n *RaftNode) candidateStateLoop(c context.Context) {
 	log.Printf("[RaftNode.candidateStateLoop]")
 	var replyChan chan *message.RequestVoteReply
-	var timeout <-chan time.Time
 	electionGrantedCount := 0
 	needEraction := true
 	n.leaderId = -1
@@ -228,7 +229,9 @@ func (n *RaftNode) candidateStateLoop(c context.Context) {
 
 			replyChan = n.doEraction()
 
-			timeout = util.Timer(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+			n.timer.Stop()
+			timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+			n.timer = time.NewTimer(timeout)
 			needEraction = false
 		}
 
@@ -255,7 +258,7 @@ func (n *RaftNode) candidateStateLoop(c context.Context) {
 		case <-n.quit:
 			log.Printf("[RaftNode.candidateStateLoop] force quit\n")
 			n.setState(StopState)
-		case <-timeout:
+		case <-n.timer.C:
 			needEraction = true
 			electionGrantedCount = 0
 			n.setTerm(n.currentTerm() - 1)
@@ -304,8 +307,7 @@ func (n *RaftNode) doEraction() chan *message.RequestVoteReply {
 			reply, err := peer.RequestVote(message)
 			if err != nil {
 				log.Printf("[RaftNode.doEraction] %s", err.Error())
-				id := int(peer.metadata.Id)
-				n.peerNodeManager.removePeerNode(id)
+				// n.peerNodeManager.removePeerNode(peer.metadata.Id)
 				return
 			}
 
@@ -395,8 +397,7 @@ func (n *RaftNode) doHeartBeat() chan *message.AppendEntriesReply {
 			reply, err := peer.AppendEntries(appendEntriesMessage)
 			if err != nil {
 				log.Printf("[RaftNode.doHeartBeat] %s", err.Error())
-				id := int(peer.metadata.Id)
-				n.peerNodeManager.removePeerNode(id)
+				// n.peerNodeManager.removePeerNode(peer.metadata.Id)
 				return
 			}
 
@@ -484,5 +485,8 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 
 	n.setState(FollowerState)
 	n.setTerm(reply.Term)
+
+	n.timer.Stop()
+
 	return reply, nil
 }

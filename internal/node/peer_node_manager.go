@@ -52,6 +52,7 @@ func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Trans
 }
 
 func (m *PeerNodeManager) registPeerNode(metadata *message.NodeMetadata) error {
+	log.Printf("[PeerNodeManager.registPeerNode] regist peer node. id : %d", metadata.Id)
 	requester, err := m.transpoter.ConnectNode(metadata)
 	if err != nil {
 		return err
@@ -83,9 +84,8 @@ func (m *PeerNodeManager) findAll() []*RaftPeerNode {
 	return nodes
 }
 
-func (m *PeerNodeManager) findPeerNode(id int) (*RaftPeerNode, error) {
-	key := int32(id)
-	value, exist := m.nodes.Load(key)
+func (m *PeerNodeManager) findPeerNode(id int32) (*RaftPeerNode, error) {
+	value, exist := m.nodes.Load(id)
 	if !exist {
 		return nil, fmt.Errorf("[PeerNodeManager.findPeerNode] not found peer node. id : %d", id)
 	}
@@ -97,9 +97,8 @@ func (m *PeerNodeManager) findPeerNode(id int) (*RaftPeerNode, error) {
 	return node, nil
 }
 
-func (m *PeerNodeManager) removePeerNode(id int) {
-	key := int32(id)
-	value, exist := m.nodes.Load(key)
+func (m *PeerNodeManager) removePeerNode(id int32) {
+	value, exist := m.nodes.Load(id)
 	if !exist {
 		log.Printf("[PeerNodeManager.removePeerNode] not found peer node. id : %d\n", id)
 		return
@@ -111,9 +110,9 @@ func (m *PeerNodeManager) removePeerNode(id int) {
 	}
 
 	node.Close()
-	m.nodes.Delete(key)
+	m.nodes.Delete(id)
 
-	atomic.AddInt32(&m.nodeNum, 1)
+	atomic.AddInt32(&m.nodeNum, -1)
 }
 
 func (m *PeerNodeManager) notifyDisconnectToAllPeerNode() {

@@ -33,6 +33,16 @@ import (
 	"time"
 )
 
+func Timout(min time.Duration, max time.Duration) time.Duration {
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	target := min
+	duration := max - min
+	if duration > 0 {
+		target += time.Duration(rand.Int63n(int64(duration)))
+	}
+	return duration
+}
+
 func Timer(min time.Duration, max time.Duration) <-chan time.Time {
 	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	target := min
