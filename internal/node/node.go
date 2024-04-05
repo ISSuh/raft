@@ -307,7 +307,6 @@ func (n *RaftNode) doEraction() chan *message.RequestVoteReply {
 			reply, err := peer.RequestVote(message)
 			if err != nil {
 				log.Printf("[RaftNode.doEraction] %s", err.Error())
-				// n.peerNodeManager.removePeerNode(peer.metadata.Id)
 				return
 			}
 
@@ -397,7 +396,6 @@ func (n *RaftNode) doHeartBeat() chan *message.AppendEntriesReply {
 			reply, err := peer.AppendEntries(appendEntriesMessage)
 			if err != nil {
 				log.Printf("[RaftNode.doHeartBeat] %s", err.Error())
-				// n.peerNodeManager.removePeerNode(peer.metadata.Id)
 				return
 			}
 
