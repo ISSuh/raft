@@ -25,28 +25,36 @@ SOFTWARE.
 package node
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 )
 
 type PeerNodeManager struct {
-	nodeMetaData *message.NodeMetadata
-	nodes        sync.Map
-	nodeNum      int32
-	transpoter   net.Transporter
+	nodeMetaData     *message.NodeMetadata
+	nodes            sync.Map
+	nodeNum          int32
+	clusterEventChan chan event.Event
+	transpoter       net.Transporter
+	quit             chan struct{}
 }
 
-func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Transporter) *PeerNodeManager {
+func NewPeerNodeManager(
+	nodeMetaData *message.NodeMetadata, clusterEventChan chan event.Event, transpoter net.Transporter, quit chan struct{},
+) *PeerNodeManager {
 	return &PeerNodeManager{
-		nodeMetaData: nodeMetaData,
-		nodes:        sync.Map{},
-		nodeNum:      0,
-		transpoter:   transpoter,
+		nodeMetaData:     nodeMetaData,
+		nodes:            sync.Map{},
+		nodeNum:          0,
+		clusterEventChan: clusterEventChan,
+		transpoter:       transpoter,
+		quit:             quit,
 	}
 }
 
@@ -135,4 +143,70 @@ func (m *PeerNodeManager) notifyDisconnectToAllPeerNode() {
 func (m *PeerNodeManager) numberOfPeer() int {
 	num := atomic.LoadInt32(&m.nodeNum)
 	return int(num)
+}
+
+func (m *PeerNodeManager) clusterEventLoop(c context.Context) {
+	for {
+		select {
+		case <-c.Done():
+			logger.Info("[clusterEventLoop] context done")
+		case <-m.quit:
+			logger.Info("[clusterEventLoop] force quit")
+		case e := <-m.WaitUntilEmit():
+			result, err := m.ProcessEvent(e)
+			if err != nil {
+				logger.Info("[clusterEventLoop] %s\n", err.Error())
+			}
+
+			e.EventResultChannel <- &event.EventResult{
+				Err:    err,
+				Result: result,
+			}
+		}
+	}
+}
+
+func (m *PeerNodeManager) WaitUntilEmit() <-chan event.Event {
+	return m.clusterEventChan
+}
+
+func (m *PeerNodeManager) ProcessEvent(e event.Event) (interface{}, error) {
+	var result interface{}
+	var err error
+	switch e.Type {
+	case event.NotifyNodeConnected:
+		result, err = m.onNotifyNodeConnected(e)
+	case event.NotifyNodeDisconnected:
+		result, err = m.onNotifyNodeDisconnected(e)
+	default:
+		result = nil
+		err = fmt.Errorf("[processClusterEvent] invalid event type. type : %s", e.Type.String())
+	}
+	return result, err
+}
+
+func (m *PeerNodeManager) onNotifyNodeConnected(e event.Event) (bool, error) {
+	logger.Debug("[onNotifyNodeConnected]")
+	node, ok := e.Message.(*message.NodeMetadata)
+	if !ok {
+		return false, fmt.Errorf("[onNotifyNodeConnected] can not convert to *message.NodeMetadata. %v", e)
+	}
+
+	err := m.registPeerNode(node)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (m *PeerNodeManager) onNotifyNodeDisconnected(e event.Event) (bool, error) {
+	logger.Debug("[onNotifyNodeDisconnected]")
+	node, ok := e.Message.(*message.NodeMetadata)
+	if !ok {
+		return false, fmt.Errorf("[onNotifyNodeDisconnected] can not convert to *message.NodeMetadata. %v", e)
+	}
+
+	logger.Info("[onNotifyNodeDisconnected] remove peer node.  %+v", node)
+	m.removePeerNode(node.Id)
+	return true, nil
 }

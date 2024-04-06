@@ -55,16 +55,18 @@ func (s State) String() string {
 }
 
 type Node struct {
-	meta  *message.NodeMetadata
-	state State
-	term  uint64
+	meta     *message.NodeMetadata
+	state    State
+	term     uint64
+	leaderId int32
 }
 
 func NewNode(metadata *message.NodeMetadata) *Node {
 	return &Node{
-		meta:  metadata,
-		state: FollowerState,
-		term:  0,
+		meta:     metadata,
+		state:    FollowerState,
+		term:     0,
+		leaderId: -1,
 	}
 }
 

@@ -35,41 +35,40 @@ import (
 
 type FollowerStateWorker struct {
 	*Node
-	nodeEventChan  chan event.Event
 	eventProcessor event.EventProcessor
 	timer          *time.Timer
 	quit           chan struct{}
 }
 
 func NewFollowerStateWorker(
-	node *Node, nodeEventChan chan event.Event, quit chan struct{}) Worker {
+	node *Node, eventProcessor event.EventProcessor, quit chan struct{},
+) Worker {
 	return &FollowerStateWorker{
-		Node: node,
-		// node:          node,
-		nodeEventChan: nodeEventChan,
-		quit:          quit,
+		Node:           node,
+		eventProcessor: eventProcessor,
+		quit:           quit,
 	}
 }
 
 func (w *FollowerStateWorker) Work(c context.Context) {
-	logger.Debug("[followerStateLoop]")
+	logger.Debug("[Work]")
 	for w.currentState() == FollowerState {
 		timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
 		w.timer = time.NewTimer(timeout)
 
 		select {
 		case <-c.Done():
-			logger.Info("[followerStateLoop] context done\n")
+			logger.Info("[Work] context done\n")
 			w.setState(StopState)
 		case <-w.quit:
-			logger.Info("[followerStateLoop] force quit\n")
+			logger.Info("[Work] force quit\n")
 			w.setState(StopState)
 		case <-w.timer.C:
 			w.setState(CandidateState)
 		case e := <-w.eventProcessor.WaitUntilEmit():
-			result, err := w.eventProcessor.Process(e)
+			result, err := w.eventProcessor.ProcessEvent(e)
 			if err != nil {
-				logger.Info("[followerStateLoop] %s\n", err.Error())
+				logger.Info("[Work] %s\n", err.Error())
 			}
 
 			e.EventResultChannel <- &event.EventResult{

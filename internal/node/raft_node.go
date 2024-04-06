@@ -45,18 +45,17 @@ const (
 	DefaultHeartBeatMaxTimeout = 150 * time.Millisecond
 )
 
+const (
+	BackgroundLoopLen = 2
+)
+
 type RaftNode struct {
 	*Node
 
-	metadata         *message.NodeMetadata
-	nodeEventChan    chan event.Event
-	clusterEventChan chan event.Event
-	peerNodeManager  *PeerNodeManager
-
-	workGroup sync.WaitGroup
-	timer     *time.Timer
-
-	leaderId int32
+	metadata        *message.NodeMetadata
+	nodeEventChan   chan event.Event
+	peerNodeManager *PeerNodeManager
+	worker          map[State]Worker
 
 	storage     storage.Engine
 	entries     []*message.LogEntry
@@ -71,20 +70,17 @@ type RaftNode struct {
 }
 
 func NewRaftNode(
-	metadata *message.NodeMetadata, nodeEventChan chan event.Event, clusterEventChan chan event.Event, peerNodeManager *PeerNodeManager,
+	metadata *message.NodeMetadata, nodeEventChan chan event.Event, peerNodeManager *PeerNodeManager, quit chan struct{},
 ) *RaftNode {
+	node := NewNode(metadata)
+
 	n := &RaftNode{
-		Node: NewNode(metadata),
+		Node: node,
 
-		metadata:         metadata,
-		nodeEventChan:    nodeEventChan,
-		clusterEventChan: clusterEventChan,
-		peerNodeManager:  peerNodeManager,
-
-		workGroup: sync.WaitGroup{},
-		timer:     nil,
-
-		leaderId: -1,
+		metadata:        metadata,
+		nodeEventChan:   nodeEventChan,
+		peerNodeManager: peerNodeManager,
+		worker:          make(map[State]Worker),
 
 		storage:     storage.NewMapEngine(),
 		entries:     make([]*message.LogEntry, 0),
@@ -92,8 +88,12 @@ func NewRaftNode(
 		nextIndex:   map[int32]int64{},
 		matchIndex:  map[int32]int64{},
 
-		quit: make(chan struct{}, 2),
+		quit: quit,
 	}
+
+	n.worker[FollowerState] = NewFollowerStateWorker(node, n, n.quit)
+	n.worker[CandidateState] = NewCandidateStateWorker(node, peerNodeManager, n, n.quit)
+	n.worker[LeaderState] = NewLeaderStateWorker(node, n, peerNodeManager, n, n.quit)
 	return n
 }
 
@@ -112,14 +112,17 @@ func (n *RaftNode) ConnectToPeerNode(peerNodes *message.NodeMetadataesList) erro
 }
 
 func (n *RaftNode) Run(c context.Context) {
-	go n.clusterEventLoop(c)
+	go n.peerNodeManager.clusterEventLoop(c)
 	go n.nodeStateLoop(c)
 }
 
 func (n *RaftNode) Stop() {
 	go func() {
 		n.setState(StopState)
-		n.quit <- struct{}{}
+
+		for i := 0; i < BackgroundLoopLen; i++ {
+			n.quit <- struct{}{}
+		}
 	}()
 }
 
@@ -151,339 +154,17 @@ func (n *RaftNode) nodeStateLoop(c context.Context) {
 			logger.Info("[nodeStateLoop] force quit")
 			return
 		default:
-			switch state {
-			case FollowerState:
-				n.followerStateLoop(c)
-			case CandidateState:
-				n.candidateStateLoop(c)
-			case LeaderState:
-				n.leaderStateLoop(c)
-			}
-
+			n.worker[state].Work(c)
 			state = n.currentState()
 		}
 	}
 }
 
-func (n *RaftNode) clusterEventLoop(c context.Context) {
-	for {
-		select {
-		case <-c.Done():
-			logger.Info("[clusterEventLoop] context done")
-		case <-n.quit:
-			logger.Info("[clusterEventLoop] force quit")
-		case e := <-n.clusterEventChan:
-			result, err := n.processClusterEvent(e)
-			if err != nil {
-				logger.Info("[clusterEventLoop] %s\n", err.Error())
-			}
-
-			e.EventResultChannel <- &event.EventResult{
-				Err:    err,
-				Result: result,
-			}
-		}
-	}
+func (n *RaftNode) WaitUntilEmit() <-chan event.Event {
+	return n.nodeEventChan
 }
 
-func (n *RaftNode) processClusterEvent(e event.Event) (interface{}, error) {
-	var result interface{}
-	var err error
-	switch e.Type {
-	case event.NotifyNodeConnected:
-		result, err = n.onNotifyNodeConnected(e)
-	case event.NotifyNodeDisconnected:
-		result, err = n.onNotifyNodeDisconnected(e)
-	default:
-		result = nil
-		err = fmt.Errorf("[processClusterEvent] invalid event type. type : %s", e.Type.String())
-	}
-	return result, err
-}
-
-func (n *RaftNode) onNotifyNodeConnected(e event.Event) (bool, error) {
-	logger.Debug("[onNotifyNodeConnected]")
-	node, ok := e.Message.(*message.NodeMetadata)
-	if !ok {
-		return false, fmt.Errorf("[onNotifyNodeConnected] can not convert to *message.NodeMetadata. %v", e)
-	}
-
-	err := n.peerNodeManager.registPeerNode(node)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func (n *RaftNode) onNotifyNodeDisconnected(e event.Event) (bool, error) {
-	logger.Debug("[onNotifyNodeDisconnected]")
-	node, ok := e.Message.(*message.NodeMetadata)
-	if !ok {
-		return false, fmt.Errorf("[onNotifyNodeDisconnected] can not convert to *message.NodeMetadata. %v", e)
-	}
-
-	logger.Info("[onNotifyNodeDisconnected] remove peer node.  %+v", node)
-	n.peerNodeManager.removePeerNode(node.Id)
-	return true, nil
-}
-
-func (n *RaftNode) followerStateLoop(c context.Context) {
-	logger.Debug("[followerStateLoop]")
-	for n.currentState() == FollowerState {
-		timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
-		n.timer = time.NewTimer(timeout)
-
-		select {
-		case <-c.Done():
-			logger.Info("[followerStateLoop] context done\n")
-			n.setState(StopState)
-		case <-n.quit:
-			logger.Info("[followerStateLoop] force quit\n")
-			n.setState(StopState)
-		case <-n.timer.C:
-			n.setState(CandidateState)
-		case e := <-n.nodeEventChan:
-			result, err := n.processNodeEvent(e)
-			if err != nil {
-				logger.Info("[followerStateLoop] %s\n", err.Error())
-			}
-
-			e.EventResultChannel <- &event.EventResult{
-				Err:    err,
-				Result: result,
-			}
-		}
-	}
-}
-
-func (n *RaftNode) candidateStateLoop(c context.Context) {
-	logger.Debug("[candidateStateLoop]")
-	var replyChan chan *message.RequestVoteReply
-	electionGrantedCount := 0
-	needEraction := true
-	n.leaderId = -1
-
-	for n.currentState() == CandidateState {
-		if needEraction {
-			n.increaseTerm()
-			electionGrantedCount++
-			n.leaderId = n.metadata.Id
-
-			replyChan = n.doEraction()
-
-			if n.timer != nil {
-				n.timer.Stop()
-			}
-
-			timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
-			n.timer = time.NewTimer(timeout)
-			needEraction = false
-		}
-
-		peerNodeLen := n.peerNodeManager.numberOfPeer()
-		majorityCount := 0
-		if peerNodeLen == 1 {
-			majorityCount = 2
-		} else {
-			majorityCount = (peerNodeLen / 2) + 1
-		}
-		logger.Info(
-			"[candidateStateLoop] peer nodel len : %d, electionGrantedCount : %d, majorityCount : %d",
-			peerNodeLen, electionGrantedCount, majorityCount,
-		)
-		if electionGrantedCount == majorityCount {
-			n.setState(LeaderState)
-			return
-		}
-
-		select {
-		case <-c.Done():
-			logger.Info("[candidateStateLoop] context done\n")
-			n.setState(StopState)
-		case <-n.quit:
-			logger.Info("[candidateStateLoop] force quit\n")
-			n.setState(StopState)
-		case <-n.timer.C:
-			needEraction = true
-			electionGrantedCount = 0
-			n.setTerm(n.currentTerm() - 1)
-		case reply := <-replyChan:
-			if reply.Term > n.currentTerm() {
-				n.setState(FollowerState)
-				return
-			}
-
-			if reply.VoteGranted && reply.Term == n.currentTerm() {
-				electionGrantedCount++
-			}
-		case e := <-n.nodeEventChan:
-			result, err := n.processNodeEvent(e)
-			if err != nil {
-				logger.Info("[candidateStateLoop] %s\n", err.Error())
-			}
-
-			e.EventResultChannel <- &event.EventResult{
-				Err:    err,
-				Result: result,
-			}
-		}
-	}
-}
-
-func (n *RaftNode) doEraction() chan *message.RequestVoteReply {
-	logger.Debug("[doEraction]")
-	peersLen := n.peerNodeManager.numberOfPeer()
-	replyCahn := make(chan *message.RequestVoteReply, peersLen)
-
-	requestVoteMessage := &message.RequestVote{
-		Term:        n.currentTerm(),
-		CandidateId: n.metadata.Id,
-	}
-
-	peerNodes := n.peerNodeManager.findAll()
-	for _, peer := range peerNodes {
-		n.workGroup.Add(1)
-		go func(peer *RaftPeerNode, message *message.RequestVote) {
-			defer n.workGroup.Done()
-			if n.currentState() != CandidateState {
-				return
-			}
-
-			reply, err := peer.RequestVote(message)
-			if err != nil {
-				logger.Info("[doEraction] %s", err.Error())
-				return
-			}
-
-			replyCahn <- reply
-		}(peer, requestVoteMessage)
-	}
-	return replyCahn
-}
-
-func (n *RaftNode) leaderStateLoop(c context.Context) {
-	logger.Debug("[leaderStateLoop]")
-
-	// var timeout <-chan time.Time
-	var replyChan chan *message.AppendEntriesReply
-	needHeartBeat := true
-	appendSuccesCount := 0
-
-	for n.currentState() == LeaderState {
-		if needHeartBeat {
-			peersLen := n.peerNodeManager.numberOfPeer()
-			replyChan = make(chan *message.AppendEntriesReply, peersLen)
-			n.doHeartBeat(replyChan)
-
-			if n.timer != nil {
-				n.timer.Stop()
-			}
-
-			timeout := util.Timout(DefaultHeartBeatMinTimeout, DefaultHeartBeatMaxTimeout)
-			n.timer = time.NewTimer(timeout)
-			needHeartBeat = false
-		}
-
-		select {
-		case <-c.Done():
-			logger.Info("[leaderStateLoop] context done\n")
-			n.setState(StopState)
-		case <-n.quit:
-			logger.Info("[leaderStateLoop] force quit\n")
-			n.setState(StopState)
-		case <-n.timer.C:
-			needHeartBeat = true
-		case reply := <-replyChan:
-			if !n.applyAppendEntries(reply, &appendSuccesCount) {
-				n.timer.Stop()
-				n.setState(FollowerState)
-				close(replyChan)
-				return
-			}
-
-			poerNodeNum := n.peerNodeManager.numberOfPeer()
-			majorityCount := (poerNodeNum / 2) + 1
-			if appendSuccesCount == majorityCount {
-				logLen := len(n.entries)
-				n.commitIndex = int64(logLen - 1)
-			}
-		case e := <-n.nodeEventChan:
-			result, err := n.processNodeEvent(e)
-			if err != nil {
-				logger.Info("[leaderStateLoop] %s\n", err.Error())
-			}
-
-			e.EventResultChannel <- &event.EventResult{
-				Err:    err,
-				Result: result,
-			}
-		}
-	}
-}
-
-func (n *RaftNode) doHeartBeat(replyChan chan *message.AppendEntriesReply) {
-	logger.Debug("[doHeartBeat]")
-	peerNodes := n.peerNodeManager.findAll()
-	for _, peer := range peerNodes {
-		n.workGroup.Add(1)
-		go func(peer *RaftPeerNode, replyChan chan *message.AppendEntriesReply) {
-			defer n.workGroup.Done()
-
-			appendEntriesMessage := &message.AppendEntries{
-				Term:              n.currentTerm(),
-				LeaderId:          n.leaderId,
-				PrevLogIndex:      -1,
-				PrevLogTerm:       0,
-				Entries:           make([]*message.LogEntry, 0),
-				LeaderCommitIndex: n.commitIndex,
-			}
-
-			nextIndex := n.nextIndex[peer.Id()]
-			prevIndex := nextIndex - 1
-			appendEntriesMessage.PrevLogIndex = prevIndex
-			if prevIndex >= 0 {
-				appendEntriesMessage.PrevLogTerm = n.entries[prevIndex].Term
-			}
-
-			n.logMutex.Lock()
-			appendEntriesMessage.Entries = n.entries[nextIndex:]
-			n.logMutex.Unlock()
-
-			reply, err := peer.AppendEntries(appendEntriesMessage)
-			if err != nil {
-				logger.Info("[doHeartBeat] %s", err.Error())
-				return
-			}
-
-			replyChan <- reply
-		}(peer, replyChan)
-	}
-}
-
-func (n *RaftNode) applyAppendEntries(message *message.AppendEntriesReply, appendSuccesCount *int) bool {
-	logger.Debug("[applyAppendEntries]")
-	if message.Term > n.currentTerm() {
-		n.setState(FollowerState)
-		n.setTerm(message.Term)
-		return false
-	}
-
-	peerId := message.PeerId
-	if !message.Success {
-		logIndex := int64(len(n.entries) - 1)
-		confilctIndex := util.Min(message.ConflictIndex, logIndex)
-		n.nextIndex[peerId] = util.Max(0, confilctIndex)
-		return false
-	}
-
-	n.nextIndex[peerId] += message.ApplyEntriesLen
-	n.matchIndex[peerId] = n.nextIndex[peerId] - 1
-
-	*appendSuccesCount++
-	return true
-}
-
-func (n *RaftNode) processNodeEvent(e event.Event) (interface{}, error) {
+func (n *RaftNode) ProcessEvent(e event.Event) (interface{}, error) {
 	var result interface{}
 	var err error
 	switch e.Type {
@@ -493,7 +174,7 @@ func (n *RaftNode) processNodeEvent(e event.Event) (interface{}, error) {
 		result, err = n.onAppendEntries(e)
 	default:
 		result = nil
-		err = fmt.Errorf("[processClusterEvent] invalid event type. type : %s", e.Type.String())
+		err = fmt.Errorf("[ProcessEvent] invalid event type. type : %s", e.Type.String())
 	}
 	return result, err
 }
@@ -543,7 +224,6 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 	// peer term is bigger than me.
 	n.setState(FollowerState)
 	n.setTerm(msg.Term)
-	n.timer.Stop()
 
 	// TODO : need update
 	// check validate between recieved prev log entry and last log entry

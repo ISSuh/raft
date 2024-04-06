@@ -26,49 +26,121 @@ package node
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/util"
 )
 
 type CandidateStateWorker struct {
-	node          *RaftNode
-	timer         *time.Timer
-	nodeEventChan chan event.Event
-	peerManager   *PeerNodeManager
-	quit          chan struct{}
+	*Node
+	timer           *time.Timer
+	peerNodeManager *PeerNodeManager
+	eventProcessor  event.EventProcessor
+	workGroup       sync.WaitGroup
+	quit            chan struct{}
 }
 
-func NewCandidateStateWorkerWorker(
-	node *RaftNode, nodeEventChan chan event.Event, quit chan struct{}) Worker {
+func NewCandidateStateWorker(
+	node *Node, peerNodeManager *PeerNodeManager, eventProcessor event.EventProcessor, quit chan struct{},
+) Worker {
 	return &CandidateStateWorker{
-		node:          node,
-		nodeEventChan: nodeEventChan,
-		quit:          quit,
+		Node:            node,
+		peerNodeManager: peerNodeManager,
+		eventProcessor:  eventProcessor,
+		quit:            quit,
 	}
 }
 
 func (w *CandidateStateWorker) Work(c context.Context) {
+	logger.Debug("[Work]")
+	var replyChan chan *message.RequestVoteReply
+	electionGrantedCount := 0
+	needEraction := true
+	w.leaderId = -1
+
+	for w.currentState() == CandidateState {
+		if needEraction {
+			w.increaseTerm()
+			electionGrantedCount++
+			w.leaderId = w.meta.Id
+
+			replyChan = w.doEraction()
+
+			timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+			w.timer = time.NewTimer(timeout)
+			needEraction = false
+		}
+
+		peerNodeLen := w.peerNodeManager.numberOfPeer()
+		majorityCount := 0
+		if peerNodeLen == 1 {
+			majorityCount = 2
+		} else {
+			majorityCount = (peerNodeLen / 2) + 1
+		}
+		logger.Info(
+			"[Work] peer nodel len : %d, electionGrantedCount : %d, majorityCount : %d",
+			peerNodeLen, electionGrantedCount, majorityCount,
+		)
+		if electionGrantedCount == majorityCount {
+			w.setState(LeaderState)
+			return
+		}
+
+		select {
+		case <-c.Done():
+			logger.Info("[Work] context done\n")
+			w.setState(StopState)
+		case <-w.quit:
+			logger.Info("[Work] force quit\n")
+			w.setState(StopState)
+		case <-w.timer.C:
+			needEraction = true
+			electionGrantedCount = 0
+			w.setTerm(w.currentTerm() - 1)
+		case reply := <-replyChan:
+			if reply.Term > w.currentTerm() {
+				w.setState(FollowerState)
+				return
+			}
+
+			if reply.VoteGranted && reply.Term == w.currentTerm() {
+				electionGrantedCount++
+			}
+		case e := <-w.eventProcessor.WaitUntilEmit():
+			result, err := w.eventProcessor.ProcessEvent(e)
+			if err != nil {
+				logger.Info("[Work] %s\n", err.Error())
+			}
+
+			e.EventResultChannel <- &event.EventResult{
+				Err:    err,
+				Result: result,
+			}
+		}
+	}
 }
 
 func (w *CandidateStateWorker) doEraction() chan *message.RequestVoteReply {
 	logger.Debug("[doEraction]")
-	peersLen := n.peerNodeManager.numberOfPeer()
+	peersLen := w.peerNodeManager.numberOfPeer()
 	replyCahn := make(chan *message.RequestVoteReply, peersLen)
 
 	requestVoteMessage := &message.RequestVote{
-		Term:        n.currentTerm(),
-		CandidateId: n.metadata.Id,
+		Term:        w.currentTerm(),
+		CandidateId: w.meta.Id,
 	}
 
-	peerNodes := n.peerNodeManager.findAll()
+	peerNodes := w.peerNodeManager.findAll()
 	for _, peer := range peerNodes {
-		n.workGroup.Add(1)
+		w.workGroup.Add(1)
 		go func(peer *RaftPeerNode, message *message.RequestVote) {
-			defer n.workGroup.Done()
-			if n.currentState() != CandidateState {
+			defer w.workGroup.Done()
+			if w.currentState() != CandidateState {
 				return
 			}
 

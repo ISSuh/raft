@@ -31,14 +31,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewNodeState(t *testing.T) {
-	nodeState := NewNodeState()
+func TestNewNode(t *testing.T) {
+	nodeState := NewNode()
 	assert.Equal(t, nodeState.state, FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 }
 
 func TestSetState(t *testing.T) {
-	nodeState := NewNodeState()
+	nodeState := NewNode()
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
@@ -47,7 +47,7 @@ func TestSetState(t *testing.T) {
 }
 
 func TestSetTerm(t *testing.T) {
-	nodeState := NewNodeState()
+	nodeState := NewNode()
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
@@ -56,7 +56,7 @@ func TestSetTerm(t *testing.T) {
 }
 
 func TestInscreaseTerm(t *testing.T) {
-	nodeState := NewNodeState()
+	nodeState := NewNode()
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
@@ -65,7 +65,7 @@ func TestInscreaseTerm(t *testing.T) {
 }
 
 func TestConcurrencyIncrease(t *testing.T) {
-	nodeState := NewNodeState()
+	nodeState := NewNode()
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 

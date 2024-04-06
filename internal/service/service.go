@@ -63,13 +63,15 @@ func NewRaftService(config config.RaftConfig) *RaftService {
 		},
 	}
 
-	nodeEventChan := make(chan event.Event)
-	clusterEventChan := make(chan event.Event)
-	h := rpc.NewNodeRpcHandler(nodeEventChan, clusterEventChan)
-	t := rpc.NewRpcTransporter(config.Server.Address, h)
-	m := node.NewPeerNodeManager(metadata, t)
+	q := make(chan struct{}, node.BackgroundLoopLen)
+	nc := make(chan event.Event)
+	cc := make(chan event.Event)
 
-	node := node.NewRaftNode(metadata, nodeEventChan, clusterEventChan, m)
+	h := rpc.NewNodeRpcHandler(nc, cc)
+	t := rpc.NewRpcTransporter(config.Server.Address, h)
+	m := node.NewPeerNodeManager(metadata, cc, t, q)
+
+	node := node.NewRaftNode(metadata, nc, m, q)
 	s := &RaftService{
 		config:      config,
 		node:        node,

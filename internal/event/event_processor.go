@@ -26,5 +26,5 @@ package event
 
 type EventProcessor interface {
 	WaitUntilEmit() <-chan Event
-	Process(e Event) (interface{}, error)
+	ProcessEvent(e Event) (interface{}, error)
 }

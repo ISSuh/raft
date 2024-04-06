@@ -76,5 +76,5 @@ func (n *Node) Serve(context context.Context) error {
 }
 
 func (n *Node) AppendLog(command []byte) error {
-	return n.AppendLog(command)
+	return n.raftService.AppendLog(command)
 }
