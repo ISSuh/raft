@@ -22,53 +22,49 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package main
+package logger
 
 import (
-	"log"
-	"net"
-	"net/rpc"
-	"os"
+	"time"
 
-	"github.com/ISSuh/raft/message"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-const (
-	Localhost = "localhost"
-	RpcMethod = "Raft.ApplyEntry"
-)
+var zapLog *zap.Logger
 
-func main() {
-	log.Println("RAFT ")
-	args := os.Args[1:]
-	if len(args) < 1 {
-		log.Println("invalid number of arguments")
-		return
-	}
+func init() {
+	var err error
+	config := zap.NewProductionConfig()
+	config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	config.Encoding = "console"
 
-	port := args[0]
-	address := Localhost + ":" + port
-	addr, err := net.ResolveTCPAddr("tcp", address)
+	enccoderConfig := zap.NewProductionEncoderConfig()
+	enccoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
+
+	config.EncoderConfig = enccoderConfig
+	zapLog, err = config.Build(zap.AddCallerSkip(1))
 	if err != nil {
-		log.Println("net.ResolveTCPAddr err : ", err)
-		return
+		panic(err)
 	}
+}
 
-	client, err := rpc.Dial(addr.Network(), addr.String())
-	if err != nil {
-		log.Println("rpc.Dial err : ", err)
-		return
-	}
+func Debug(message string, fields ...interface{}) {
+	zapLog.Sugar().Debugf(message, fields...)
+}
 
-	applyEntry := message.ApplyEntry{
-		Log: []byte("TEST"),
-	}
+func Info(message string, fields ...interface{}) {
+	zapLog.Sugar().Infof(message, fields...)
+}
 
-	var reply bool
-	err = client.Call(RpcMethod, &applyEntry, &reply)
-	if err != nil {
-		log.Println("client.Call err : ", err)
-	}
+func Warn(message string, fields ...interface{}) {
+	zapLog.Sugar().Warnf(message, fields...)
+}
 
-	log.Println("respone: ", reply)
+func Error(message string, fields ...interface{}) {
+	zapLog.Sugar().Errorf(message, fields...)
+}
+
+func Fatal(message string, fields ...interface{}) {
+	zapLog.Sugar().Fatalf(message, fields...)
 }

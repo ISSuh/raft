@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package event
 
-type Storage interface {
-	Set(key string, value []byte)
-	Get(key string) []byte
+type EventProcessor interface {
+	WaitUntilEmit() <-chan Event
+	Process(e Event) (interface{}, error)
 }

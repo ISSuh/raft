@@ -22,29 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package raft
+package node
 
-import "sync"
+import "context"
 
-type MapStorage struct {
-	engine map[string][]byte
-	mutex  sync.Mutex
-}
-
-func NewMapStorage() *MapStorage {
-	return &MapStorage{
-		engine: make(map[string][]byte),
-	}
-}
-
-func (storage *MapStorage) Set(key string, value []byte) {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-	storage.engine[key] = value
-}
-
-func (storage *MapStorage) Get(key string) []byte {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-	return storage.engine[key]
+type Worker interface {
+	Work(c context.Context)
 }

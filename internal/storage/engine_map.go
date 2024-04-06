@@ -22,60 +22,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package node
+package storage
 
-import (
-	"sync/atomic"
-)
+import "sync"
 
-type State uint32
+type MapEngine struct {
+	engine map[string][]byte
+	mutex  sync.Mutex
+}
 
-const (
-	StopState State = iota
-	FollowerState
-	CandidateState
-	LeaderState
-)
-
-func (s State) String() string {
-	switch s {
-	case StopState:
-		return "Stop"
-	case FollowerState:
-		return "Follower"
-	case CandidateState:
-		return "Candidate"
-	case LeaderState:
-		return "Leader"
+func NewMapEngine() *MapEngine {
+	return &MapEngine{
+		engine: make(map[string][]byte),
 	}
-	return "invalid state"
 }
 
-type NodeState struct {
-	state State
-	term  uint64
+func (e *MapEngine) Set(key string, value []byte) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.engine[key] = value
 }
 
-func NewNodeState() *NodeState {
-	return &NodeState{state: FollowerState, term: 0}
-}
-
-func (nodeState *NodeState) currentState() State {
-	return State(atomic.LoadUint32((*uint32)(&nodeState.state)))
-}
-
-func (nodeState *NodeState) setState(state State) {
-	atomic.StoreUint32((*uint32)(&nodeState.state), uint32(state))
-}
-
-func (nodeState *NodeState) currentTerm() uint64 {
-	return atomic.LoadUint64(&nodeState.term)
-}
-
-func (nodeState *NodeState) setTerm(term uint64) {
-	atomic.StoreUint64(&nodeState.term, term)
-}
-
-func (nodeState *NodeState) increaseTerm() {
-	atomic.AddUint64(&nodeState.term, 1)
+func (e *MapEngine) Get(key string) []byte {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	return e.engine[key]
 }

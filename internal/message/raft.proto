@@ -53,4 +53,5 @@ message AppendEntriesReply {
   int32 peer_id = 3;
   int64 conflict_index = 4;
   uint64 conflict_term = 5;
+  int64 apply_entries_len = 6;
 }

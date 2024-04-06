@@ -27,9 +27,9 @@ package cluster
 import (
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 )
@@ -129,7 +129,7 @@ func (n *nodeManager) nodeHealthChecking(id int) error {
 	if err := node.Requester.HelthCheck(); err != nil {
 		if node.HealthCheckRetryCount < HealthCheckMaxFailCount {
 			node.HealthCheckRetryCount++
-			log.Printf(
+			logger.Info(
 				"[nodeManager.nodeHealthChecking] %d node healcheck fall. retry [%d/%d] %s",
 				id, node.HealthCheckRetryCount, HealthCheckMaxFailCount, err.Error(),
 			)

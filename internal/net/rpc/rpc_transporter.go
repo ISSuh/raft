@@ -27,13 +27,13 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"log"
 	gonet "net"
 	"net/rpc"
 	"strconv"
 	"sync"
 
 	"github.com/ISSuh/raft/internal/config"
+	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 )
@@ -63,7 +63,7 @@ func NewRpcTransporter(address config.Address, handler RpcHandler) *RpcTransport
 }
 
 func (t *RpcTransporter) Serve(context context.Context) error {
-	log.Printf("[RpcTransporter.Serve]\n")
+	logger.Info("[RpcTransporter.Serve]\n")
 	return t.serveRpcServer(context)
 }
 
@@ -98,10 +98,10 @@ func (t *RpcTransporter) runServer(context context.Context) {
 			if err != nil {
 				select {
 				case <-context.Done():
-					log.Printf("contex cancel\n")
+					logger.Info("contex cancel\n")
 					return
 				case <-t.quit:
-					log.Printf("quit\n")
+					logger.Info("quit\n")
 					return
 				default:
 					continue

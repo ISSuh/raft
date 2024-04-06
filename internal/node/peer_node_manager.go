@@ -26,10 +26,10 @@ package node
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 
+	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 )
@@ -41,7 +41,6 @@ type PeerNodeManager struct {
 	transpoter   net.Transporter
 }
 
-// map[int32]*RaftPeerNode{}
 func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Transporter) *PeerNodeManager {
 	return &PeerNodeManager{
 		nodeMetaData: nodeMetaData,
@@ -52,7 +51,7 @@ func NewPeerNodeManager(nodeMetaData *message.NodeMetadata, transpoter net.Trans
 }
 
 func (m *PeerNodeManager) registPeerNode(metadata *message.NodeMetadata) error {
-	log.Printf("[PeerNodeManager.registPeerNode] regist peer node. id : %d", metadata.Id)
+	logger.Info("[PeerNodeManager.registPeerNode] regist peer node. id : %d", metadata.Id)
 	requester, err := m.transpoter.ConnectNode(metadata)
 	if err != nil {
 		return err
@@ -75,7 +74,7 @@ func (m *PeerNodeManager) findAll() []*RaftPeerNode {
 	m.nodes.Range(func(_, value any) bool {
 		node, ok := value.(*RaftPeerNode)
 		if !ok {
-			log.Printf("[PeerNodeManager.removePeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
+			logger.Info("[PeerNodeManager.removePeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
 		}
 
 		nodes = append(nodes, node)
@@ -100,13 +99,13 @@ func (m *PeerNodeManager) findPeerNode(id int32) (*RaftPeerNode, error) {
 func (m *PeerNodeManager) removePeerNode(id int32) {
 	value, exist := m.nodes.Load(id)
 	if !exist {
-		log.Printf("[PeerNodeManager.removePeerNode] not found peer node. id : %d\n", id)
+		logger.Info("[PeerNodeManager.removePeerNode] not found peer node. id : %d\n", id)
 		return
 	}
 
 	node, ok := value.(*RaftPeerNode)
 	if !ok {
-		log.Printf("[PeerNodeManager.removePeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
+		logger.Info("[PeerNodeManager.removePeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
 	}
 
 	node.Close()
@@ -119,7 +118,7 @@ func (m *PeerNodeManager) notifyDisconnectToAllPeerNode() {
 	m.nodes.Range(func(key, value any) bool {
 		node, ok := value.(*RaftPeerNode)
 		if !ok {
-			log.Printf("[PeerNodeManager.notifyDisconnectToAllPeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
+			logger.Info("[PeerNodeManager.notifyDisconnectToAllPeerNode] can not convert value to RaftPeerNode. value : %v\n", value)
 			return false
 		}
 

@@ -41,6 +41,10 @@ func NewRaftPeerNode(metadata *message.NodeMetadata, requestor net.NodeRequester
 	}
 }
 
+func (n *RaftPeerNode) Id() int32 {
+	return n.metadata.Id
+}
+
 func (n *RaftPeerNode) NotifyNodeConnected(message *message.NodeMetadata) (bool, error) {
 	return n.requestor.NotifyNodeConnected(message)
 }
