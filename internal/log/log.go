@@ -64,8 +64,8 @@ func (l *Logs) AppendLogSinceToIndex(index int64, entires []*message.LogEntry) e
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if l.Len() <= int(index) {
-		return fmt.Errorf("[Logs.AppendLog] logIndex bigger than len of entries. logIndex : %d, len : %d", index, l.Len())
+	if index != 0 && l.Len() <= int(index) {
+		return fmt.Errorf("[AppendLogSinceToIndex] logIndex bigger than len of entries. logIndex : %d, len : %d", index, l.Len())
 	}
 
 	l.entries = append(l.entries[:index], entires...)
@@ -94,7 +94,7 @@ func (l *Logs) UpdateMatchIndex(peerId int32, index int64) {
 
 func (l *Logs) EntryTerm(logIndex int64) (uint64, error) {
 	if l.Len() <= int(logIndex) {
-		return 0, fmt.Errorf("[Logs.Term] logIndex bigger than len of entries. logIndex : %d, len : %d", logIndex, l.Len())
+		return 0, fmt.Errorf("[Term] logIndex bigger than len of entries. logIndex : %d, len : %d", logIndex, l.Len())
 	}
 	return l.entries[logIndex].Term, nil
 }

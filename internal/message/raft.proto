@@ -45,7 +45,7 @@ message AppendEntries {
   uint64 prev_log_term = 4;
   repeated LogEntry entries = 5;
   int64 leader_commit_index = 6;
-}
+} 
 
 message AppendEntriesReply {
   uint64 term = 1;

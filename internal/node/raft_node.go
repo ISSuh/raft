@@ -209,6 +209,8 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		return r, nil
 	}
 
+	logger.Debug("[onAppendEntries] entry : %v", *msg)
+
 	// peer term is bigger than me.
 	n.setState(FollowerState)
 	n.setTerm(msg.Term)
@@ -265,6 +267,7 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		newLogIndex++
 	}
 
+	// TODO : need fix append log
 	// update log entries
 	if newLogIndex < newLogLen {
 		applyEntries := msg.Entries[newLogIndex:]
@@ -284,8 +287,6 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 
 		// need commit log to storage
 	}
-
-	logger.Debug("[onAppendEntries] entry : %v", *msg)
 
 	r := &message.AppendEntriesReply{
 		Term:            msg.Term,
