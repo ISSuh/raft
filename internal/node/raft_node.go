@@ -27,10 +27,10 @@ package node
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ISSuh/raft/internal/event"
+	"github.com/ISSuh/raft/internal/log"
 	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/storage"
@@ -57,14 +57,8 @@ type RaftNode struct {
 	peerNodeManager *PeerNodeManager
 	worker          map[State]Worker
 
-	storage     storage.Engine
-	entries     []*message.LogEntry
-	commitIndex int64
-	// map[peerId]logIndex
-	nextIndex map[int32]int64
-	// map[peerId]logIndex
-	matchIndex map[int32]int64
-	logMutex   sync.Mutex
+	storage storage.Engine
+	logs    *log.Logs
 
 	quit chan struct{}
 }
@@ -73,6 +67,7 @@ func NewRaftNode(
 	metadata *message.NodeMetadata, nodeEventChan chan event.Event, peerNodeManager *PeerNodeManager, quit chan struct{},
 ) *RaftNode {
 	node := NewNode(metadata)
+	logs := log.NewLogs()
 
 	n := &RaftNode{
 		Node: node,
@@ -82,18 +77,15 @@ func NewRaftNode(
 		peerNodeManager: peerNodeManager,
 		worker:          make(map[State]Worker),
 
-		storage:     storage.NewMapEngine(),
-		entries:     make([]*message.LogEntry, 0),
-		commitIndex: -1,
-		nextIndex:   map[int32]int64{},
-		matchIndex:  map[int32]int64{},
+		storage: storage.NewMapEngine(),
+		logs:    logs,
 
 		quit: quit,
 	}
 
 	n.worker[FollowerState] = NewFollowerStateWorker(node, n, n.quit)
 	n.worker[CandidateState] = NewCandidateStateWorker(node, peerNodeManager, n, n.quit)
-	n.worker[LeaderState] = NewLeaderStateWorker(node, n, peerNodeManager, n, n.quit)
+	n.worker[LeaderState] = NewLeaderStateWorker(node, logs, peerNodeManager, n, n.quit)
 	return n
 }
 
@@ -132,13 +124,11 @@ func (n *RaftNode) Submit(command []byte) error {
 		return fmt.Errorf("[RaftNode.Submit] currunt state is not leader. state : %s", state)
 	}
 
-	n.logMutex.Lock()
-	defer n.logMutex.Unlock()
+	l := []*message.LogEntry{
+		{Term: n.currentTerm(), Log: command},
+	}
 
-	n.entries = append(n.entries, &message.LogEntry{
-		Term: n.currentTerm(),
-		Log:  command,
-	})
+	n.logs.AppendLog(l)
 	return nil
 }
 
@@ -186,8 +176,6 @@ func (n *RaftNode) onRequestVote(e event.Event) (*message.RequestVoteReply, erro
 		return nil, fmt.Errorf("[onRequestVote] can not convert to *message.RequestVoteReply. %v", e)
 	}
 
-	logger.Info("[onRequestVote] my term : %d, request : %s", n.currentState(), requestVoteMessage)
-
 	// TODO : need implement case of same term of request and my term
 	reply := &message.RequestVoteReply{}
 	if requestVoteMessage.Term > n.currentTerm() {
@@ -211,7 +199,7 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		return nil, fmt.Errorf("[onAppendEntries] can not convert to *message.RequestVoteReply. %v", e)
 	}
 
-	// peer term is less than me. return false to peer
+	// peer term is less than me. return false
 	if msg.Term < n.currentTerm() {
 		r := &message.AppendEntriesReply{
 			Term:    n.currentTerm(),
@@ -225,13 +213,23 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 	n.setState(FollowerState)
 	n.setTerm(msg.Term)
 
-	// TODO : need update
 	// check validate between recieved prev log entry and last log entry
-	if !n.isValidPrevLogIndexAndTerm(msg.PrevLogTerm, msg.PrevLogIndex) {
-		lastIndex := int64(len(n.entries) - 1)
+	isValid, err := n.isValidPrevLogIndexAndTerm(msg.PrevLogTerm, msg.PrevLogIndex)
+	if err != nil {
+		return nil, err
+	}
 
+	if !isValid {
+		lastIndex := int64(n.logs.Len() - 1)
 		conflictIndex := util.Min(lastIndex, msg.PrevLogIndex)
-		conflictTerm := n.entries[conflictIndex].Term
+
+		conflictTerm := uint64(0)
+		if conflictIndex > 0 {
+			conflictTerm, err = n.logs.EntryTerm(conflictIndex)
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		r := &message.AppendEntriesReply{
 			Term:          n.currentTerm(),
@@ -243,10 +241,9 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		return r, nil
 	}
 
-	// TODO : need update
 	// find received entries index and node.log index for save entries
 	logIndex := msg.PrevLogIndex + 1
-	logLen := len(n.entries)
+	logLen := n.logs.Len()
 	newLogIndex := 0
 	newLogLen := len(msg.Entries)
 	applyEntriesLen := int64(0)
@@ -255,7 +252,12 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 			break
 		}
 
-		if n.entries[logIndex].Term != msg.Entries[newLogIndex].Term {
+		term, err := n.logs.EntryTerm(logIndex)
+		if err != nil {
+			return nil, err
+		}
+
+		if term != msg.Entries[newLogIndex].Term {
 			break
 		}
 
@@ -265,18 +267,25 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 
 	// update log entries
 	if newLogIndex < newLogLen {
-		n.entries = append(n.entries[:logIndex], msg.Entries[newLogIndex:]...)
+		applyEntries := msg.Entries[newLogIndex:]
+		if err := n.logs.AppendLogSinceToIndex(logIndex, applyEntries); err != nil {
+			return nil, err
+		}
 		applyEntriesLen = int64(newLogLen - newLogIndex)
 	}
 
 	// commit
-	if msg.LeaderCommitIndex > n.commitIndex {
-		updatedlogLen := len(n.entries)
+	commitIndex := n.logs.CommitIndex()
+	if msg.LeaderCommitIndex > commitIndex {
+		updatedlogLen := n.logs.Len()
 		updatedLogIndex := int64(updatedlogLen - 1)
-		n.commitIndex = util.Min(msg.LeaderCommitIndex, updatedLogIndex)
+		newCommitIndex := util.Min(msg.LeaderCommitIndex, updatedLogIndex)
+		n.logs.UpdateCommitIndex(newCommitIndex)
 
 		// need commit log to storage
 	}
+
+	logger.Debug("[onAppendEntries] entry : %v", *msg)
 
 	r := &message.AppendEntriesReply{
 		Term:            msg.Term,
@@ -287,15 +296,24 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 	return r, nil
 }
 
-func (n *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevLogIndex int64) bool {
+func (n *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevLogIndex int64) (bool, error) {
+	// initail index when first request
 	if prevLogIndex == -1 {
-		return true
+		return true, nil
 	}
 
-	lastLogIndex := int64(len(n.entries) - 1)
-	lastLogTermOnPrevIndex := n.entries[prevLogIndex].Term
-	if (prevLogIndex < lastLogIndex) || (prevLogTerm != lastLogTermOnPrevIndex) {
-		return false
+	lastLogIndex := int64(n.logs.Len() - 1)
+	if prevLogIndex > lastLogIndex {
+		return false, nil
 	}
-	return true
+
+	lastLogTermOnPrevIndex, err := n.logs.EntryTerm(prevLogIndex)
+	if err != nil {
+		return false, err
+	}
+
+	if prevLogTerm != lastLogTermOnPrevIndex {
+		return false, nil
+	}
+	return true, nil
 }

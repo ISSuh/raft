@@ -38,11 +38,11 @@ type Logs struct {
 	nextIndex map[int32]int64
 	// map[peerId]logIndex
 	matchIndex map[int32]int64
-	logMutex   sync.Mutex
+	mutex      sync.Mutex
 }
 
-func NewLogs() Logs {
-	return Logs{
+func NewLogs() *Logs {
+	return &Logs{
 		entries:     make([]*message.LogEntry, 0),
 		commitIndex: -1,
 		nextIndex:   map[int32]int64{},
@@ -54,12 +54,21 @@ func (l *Logs) Len() int {
 	return len(l.entries)
 }
 
-func (l *Logs) AppendLog(logIndex int64, entires []*message.LogEntry) error {
-	if l.Len() <= int(logIndex) {
-		return fmt.Errorf("[Logs.AppendLog] logIndex bigger than len of entries. logIndex : %d, len : %d", logIndex, l.Len())
+func (l *Logs) AppendLog(entires []*message.LogEntry) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.entries = append(l.entries, entires...)
+}
+
+func (l *Logs) AppendLogSinceToIndex(index int64, entires []*message.LogEntry) error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.Len() <= int(index) {
+		return fmt.Errorf("[Logs.AppendLog] logIndex bigger than len of entries. logIndex : %d, len : %d", index, l.Len())
 	}
 
-	l.entries = append(l.entries[:logIndex], entires...)
+	l.entries = append(l.entries[:index], entires...)
 	return nil
 }
 
@@ -68,18 +77,57 @@ func (l *Logs) NextIndex(peerId int32) int64 {
 }
 
 func (l *Logs) UpdateNextIndex(peerId int32, index int64) {
-	l.logMutex.Lock()
-	defer l.logMutex.Unlock()
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 	l.nextIndex[peerId] = index
 }
 
-func (l *Logs) Term(logIndex int32) (uint64, error) {
+func (l *Logs) MatchIndex(peerId int32) int64 {
+	return l.matchIndex[peerId]
+}
+
+func (l *Logs) UpdateMatchIndex(peerId int32, index int64) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.matchIndex[peerId] = index
+}
+
+func (l *Logs) EntryTerm(logIndex int64) (uint64, error) {
 	if l.Len() <= int(logIndex) {
 		return 0, fmt.Errorf("[Logs.Term] logIndex bigger than len of entries. logIndex : %d, len : %d", logIndex, l.Len())
 	}
 	return l.entries[logIndex].Term, nil
 }
 
-func (l *Logs) MatchIndex(peerId int32) int64 {
-	return l.matchIndex[peerId]
+func (l *Logs) CommitIndex() int64 {
+	return l.commitIndex
+}
+
+func (l *Logs) UpdateCommitIndex(index int64) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.commitIndex = index
+}
+
+func (l *Logs) Truncate(begin int64) error {
+	if begin < 0 {
+		return fmt.Errorf("[Truncate] invalid index. begin : %d", begin)
+	}
+	l.entries = l.entries[begin:]
+	return nil
+}
+
+func (l *Logs) Since(begin int64) ([]*message.LogEntry, error) {
+	end := int64(l.Len() - 1)
+	return l.Range(begin, end)
+}
+
+func (l *Logs) Range(begin, end int64) ([]*message.LogEntry, error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if begin < 0 || end >= int64(l.Len()) {
+		return nil, fmt.Errorf("[Range] invalid index. begin : %d, end : %d, len : %d", begin, end, l.Len())
+	}
+	return l.entries[begin:end], nil
 }

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/ISSuh/raft/internal/event"
+	"github.com/ISSuh/raft/internal/log"
 	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/util"
@@ -37,7 +38,7 @@ import (
 
 type LeaderStateWorker struct {
 	*Node
-	raftNode        *RaftNode
+	logs            *log.Logs
 	timer           *time.Timer
 	peerNodeManager *PeerNodeManager
 	eventProcessor  event.EventProcessor
@@ -46,11 +47,11 @@ type LeaderStateWorker struct {
 }
 
 func NewLeaderStateWorker(
-	node *Node, raftNode *RaftNode, peerNodeManager *PeerNodeManager, eventProcessor event.EventProcessor, quit chan struct{},
+	node *Node, logs *log.Logs, peerNodeManager *PeerNodeManager, eventProcessor event.EventProcessor, quit chan struct{},
 ) Worker {
 	return &LeaderStateWorker{
 		Node:            node,
-		raftNode:        raftNode,
+		logs:            logs,
 		peerNodeManager: peerNodeManager,
 		eventProcessor:  eventProcessor,
 		quit:            quit,
@@ -97,18 +98,16 @@ func (w *LeaderStateWorker) Work(c context.Context) {
 			poerNodeNum := w.peerNodeManager.numberOfPeer()
 			majorityCount := (poerNodeNum / 2) + 1
 			if appendSuccesCount == majorityCount {
-				logLen := len(w.raftNode.entries)
-				w.raftNode.commitIndex = int64(logLen - 1)
+				newCommitIndex := int64(w.logs.Len()) - 1
+				w.logs.UpdateCommitIndex(newCommitIndex)
 			}
 		case e := <-w.eventProcessor.WaitUntilEmit():
 			result, err := w.eventProcessor.ProcessEvent(e)
 			if err != nil {
 				logger.Info("[Work] %s\n", err.Error())
-			} else {
-				if e.Type == event.AppendEntries {
-					w.timer.Stop()
-				}
 			}
+
+			// TODO: need timer reset when fit recived appendEntry from leader
 
 			e.EventResultChannel <- &event.EventResult{
 				Err:    err,
@@ -126,25 +125,32 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 		go func(peer *RaftPeerNode, replyChan chan *message.AppendEntriesReply) {
 			defer w.workGroup.Done()
 
+			var err error
 			appendEntriesMessage := &message.AppendEntries{
 				Term:              w.currentTerm(),
 				LeaderId:          w.leaderId,
 				PrevLogIndex:      -1,
 				PrevLogTerm:       0,
 				Entries:           make([]*message.LogEntry, 0),
-				LeaderCommitIndex: w.raftNode.commitIndex,
+				LeaderCommitIndex: w.logs.CommitIndex(),
 			}
 
-			nextIndex := w.raftNode.nextIndex[peer.Id()]
+			nextIndex := w.logs.NextIndex(peer.Id())
 			prevIndex := nextIndex - 1
 			appendEntriesMessage.PrevLogIndex = prevIndex
 			if prevIndex >= 0 {
-				appendEntriesMessage.PrevLogTerm = w.raftNode.entries[prevIndex].Term
+				appendEntriesMessage.PrevLogTerm, err = w.logs.EntryTerm(prevIndex)
+				if err != nil {
+					logger.Info("[doHeartBeat] %s", err.Error())
+					return
+				}
 			}
 
-			w.raftNode.logMutex.Lock()
-			appendEntriesMessage.Entries = w.raftNode.entries[nextIndex:]
-			w.raftNode.logMutex.Unlock()
+			appendEntriesMessage.Entries, err = w.logs.Since(nextIndex)
+			if err != nil {
+				logger.Info("[doHeartBeat] %s", err.Error())
+				return
+			}
 
 			reply, err := peer.AppendEntries(appendEntriesMessage)
 			if err != nil {
@@ -167,14 +173,18 @@ func (w *LeaderStateWorker) applyAppendEntries(message *message.AppendEntriesRep
 
 	peerId := message.PeerId
 	if !message.Success {
-		logIndex := int64(len(w.raftNode.entries) - 1)
+		logIndex := int64(w.logs.Len() - 1)
 		confilctIndex := util.Min(message.ConflictIndex, logIndex)
-		w.raftNode.nextIndex[peerId] = util.Max(0, confilctIndex)
+		newNextIndex := util.Max(0, confilctIndex)
+		w.logs.UpdateNextIndex(peerId, newNextIndex)
 		return false
 	}
 
-	w.raftNode.nextIndex[peerId] += message.ApplyEntriesLen
-	w.raftNode.matchIndex[peerId] = w.raftNode.nextIndex[peerId] - 1
+	newNextIndex := w.logs.NextIndex(peerId) + message.ApplyEntriesLen
+	w.logs.UpdateNextIndex(peerId, newNextIndex)
+
+	newMatchIndex := newNextIndex - 1
+	w.logs.UpdateMatchIndex(peerId, newMatchIndex)
 
 	*appendSuccesCount++
 	return true
