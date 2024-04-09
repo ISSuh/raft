@@ -177,6 +177,7 @@ func (n *RaftNode) onRequestVote(e event.Event) (*message.RequestVoteReply, erro
 	}
 
 	// TODO : need implement case of same term of request and my term
+	logger.Debug("[onRequestVote] current term : %d, message : %+v", n.term, *requestVoteMessage)
 	reply := &message.RequestVoteReply{}
 	if requestVoteMessage.Term > n.currentTerm() {
 		n.setTerm(requestVoteMessage.Term)
@@ -184,6 +185,7 @@ func (n *RaftNode) onRequestVote(e event.Event) (*message.RequestVoteReply, erro
 		n.leaderId = requestVoteMessage.CandidateId
 
 		reply.VoteGranted = true
+		reply.Term = requestVoteMessage.Term
 	} else {
 		reply.Term = n.currentTerm()
 		reply.VoteGranted = false

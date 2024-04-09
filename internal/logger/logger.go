@@ -25,8 +25,6 @@ SOFTWARE.
 package logger
 
 import (
-	"time"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -40,7 +38,7 @@ func init() {
 	config.Encoding = "console"
 
 	enccoderConfig := zap.NewProductionEncoderConfig()
-	enccoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
+	enccoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	config.EncoderConfig = enccoderConfig
 	zapLog, err = config.Build(zap.AddCallerSkip(1))

@@ -71,6 +71,8 @@ func (w *CandidateStateWorker) Work(c context.Context) {
 			replyChan = w.doEraction()
 
 			timeout := util.Timout(DefaultElectionMinTimeout, DefaultElectionMaxTimeout)
+			logger.Info("[Work] timeout : %d", timeout)
+
 			w.timer = time.NewTimer(timeout)
 			needEraction = false
 		}
@@ -82,10 +84,12 @@ func (w *CandidateStateWorker) Work(c context.Context) {
 		} else {
 			majorityCount = (peerNodeLen / 2) + 1
 		}
+
 		logger.Info(
-			"[Work] peer nodel len : %d, electionGrantedCount : %d, majorityCount : %d",
+			"[Work] peer node len : %d, electionGrantedCount : %d, majorityCount : %d",
 			peerNodeLen, electionGrantedCount, majorityCount,
 		)
+
 		if electionGrantedCount == majorityCount {
 			w.setState(LeaderState)
 			return
@@ -93,12 +97,13 @@ func (w *CandidateStateWorker) Work(c context.Context) {
 
 		select {
 		case <-c.Done():
-			logger.Info("[Work] context done\n")
+			logger.Info("[Work] context done")
 			w.setState(StopState)
 		case <-w.quit:
-			logger.Info("[Work] force quit\n")
+			logger.Info("[Work] force quit")
 			w.setState(StopState)
 		case <-w.timer.C:
+			logger.Info("[Work] timeout")
 			needEraction = true
 			electionGrantedCount = 0
 			w.setTerm(w.currentTerm() - 1)
