@@ -62,5 +62,5 @@ func (n *RaftPeerNode) AppendEntries(message *message.AppendEntries) (*message.A
 }
 
 func (n *RaftPeerNode) Close() {
-	n.requestor.Close()
+	n.requestor.CloseNodeRequester()
 }

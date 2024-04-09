@@ -26,13 +26,18 @@ package net
 
 import (
 	"context"
+	"time"
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/message"
 )
 
+const (
+	DefaultRequestTimneout = 5 * time.Second
+)
+
 type NodeRequester interface {
-	Close()
+	CloseNodeRequester()
 
 	// call by cluster
 	HelthCheck() error
@@ -45,6 +50,9 @@ type NodeRequester interface {
 }
 
 type ClusterRequester interface {
+	CloseClusterRequester()
+
+	// call by node
 	NotifyMeToCluster(myNode *message.NodeMetadata) (*message.NodeMetadataesList, error)
 	DisconnectNode(myNode *message.NodeMetadata) error
 	NodeList() (*message.NodeMetadataesList, error)

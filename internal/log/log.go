@@ -64,7 +64,7 @@ func (l *Logs) AppendLogSinceToIndex(index int64, entires []*message.LogEntry) e
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if index != 0 && l.Len() <= int(index) {
+	if index != 0 && l.Len() < int(index) {
 		return fmt.Errorf("[AppendLogSinceToIndex] logIndex bigger than len of entries. logIndex : %d, len : %d", index, l.Len())
 	}
 

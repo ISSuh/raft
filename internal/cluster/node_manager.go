@@ -29,14 +29,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/logger"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
 )
 
 const (
-	HealthCheckTimer        = 500 * time.Millisecond
-	HealthCheckMaxFailCount = 3
+	DefaultHealthCheckTimer      = 500 * time.Millisecond
+	DefaultHealthCheckRetryCount = 3
 )
 
 type HealthCheckFailCallback func(*message.NodeMetadata)
@@ -50,16 +51,30 @@ type node struct {
 type nodeMap map[int]*node
 
 type nodeManager struct {
-	nodes           nodeMap
-	quitHealthCheck map[int]chan struct{}
-	callback        HealthCheckFailCallback
+	healCheckTimer         time.Duration
+	healCheckMaxRetryCount int
+	nodes                  nodeMap
+	quitHealthCheck        map[int]chan struct{}
+	callback               HealthCheckFailCallback
 }
 
-func NewNodeManager(callback HealthCheckFailCallback) nodeManager {
+func NewNodeManager(healthCheckConfig config.HealthCheckConfig, callback HealthCheckFailCallback) nodeManager {
+	healCheckTimer := DefaultHealthCheckTimer
+	if healthCheckConfig.Timer > 0 {
+		healCheckTimer = time.Duration(healthCheckConfig.Timer) * time.Millisecond
+	}
+
+	healCheckMaxRetryCount := DefaultHealthCheckRetryCount
+	if healthCheckConfig.RetryCount > 0 {
+		healCheckMaxRetryCount = healthCheckConfig.RetryCount
+	}
+
 	return nodeManager{
-		nodes:           make(nodeMap),
-		quitHealthCheck: make(map[int]chan struct{}),
-		callback:        callback,
+		healCheckTimer:         healCheckTimer,
+		healCheckMaxRetryCount: healCheckMaxRetryCount,
+		nodes:                  make(nodeMap),
+		quitHealthCheck:        make(map[int]chan struct{}),
+		callback:               callback,
 	}
 }
 
@@ -79,7 +94,7 @@ func (n *nodeManager) addNode(meta *message.NodeMetadata, requester net.NodeRequ
 func (n *nodeManager) removeNode(id int) error {
 	_, exist := n.nodes[id]
 	if !exist {
-		return fmt.Errorf("[%d] node not exist.", id)
+		return fmt.Errorf("[removeNode][node : %d] not exist.", id)
 	}
 
 	n.quitHealthCheck[id] <- struct{}{}
@@ -93,7 +108,7 @@ func (n *nodeManager) removeNode(id int) error {
 func (n *nodeManager) findNode(nodeId int) (*node, error) {
 	node, exist := n.nodes[nodeId]
 	if !exist {
-		return nil, fmt.Errorf("[%d] node not exist.", nodeId)
+		return nil, fmt.Errorf("[removeNode][node : %d] not exist.", nodeId)
 	}
 	return node, nil
 }
@@ -107,7 +122,7 @@ func (n *nodeManager) nodeList() []*node {
 }
 
 func (n *nodeManager) backgroundHealthCheck(id int) {
-	ticker := time.NewTicker(HealthCheckTimer)
+	ticker := time.NewTicker(n.healCheckTimer)
 	for {
 		select {
 		case <-n.quitHealthCheck[id]:
@@ -123,19 +138,19 @@ func (n *nodeManager) backgroundHealthCheck(id int) {
 func (n *nodeManager) nodeHealthChecking(id int) error {
 	node, exist := n.nodes[id]
 	if !exist {
-		return fmt.Errorf("[nodeManager.nodeHealthChecking] node not exist. id : %d", id)
+		return fmt.Errorf("[nodeHealthChecking][node : %d] not exist.", id)
 	}
 
 	if err := node.Requester.HelthCheck(); err != nil {
-		if node.HealthCheckRetryCount < HealthCheckMaxFailCount {
+		if node.HealthCheckRetryCount < n.healCheckMaxRetryCount {
 			node.HealthCheckRetryCount++
 			logger.Info(
-				"[nodeManager.nodeHealthChecking] %d node healcheck fall. retry [%d/%d] %s",
-				id, node.HealthCheckRetryCount, HealthCheckMaxFailCount, err.Error(),
+				"[nodeHealthChecking][node : %d] healcheck fall. retry [%d/%d] %s",
+				id, node.HealthCheckRetryCount, n.healCheckMaxRetryCount, err.Error(),
 			)
 			return nil
 		} else {
-			node.Requester.Close()
+			node.Requester.CloseNodeRequester()
 			close(n.quitHealthCheck[id])
 			delete(n.quitHealthCheck, id)
 			delete(n.nodes, id)
@@ -143,8 +158,8 @@ func (n *nodeManager) nodeHealthChecking(id int) error {
 			n.callback(node.Metadata)
 			return errors.Join(
 				err,
-				fmt.Errorf("[nodeManager.nodeHealthChecking] %d node healcheck fall and retry over %d. will disconnect.",
-					id, HealthCheckMaxFailCount,
+				fmt.Errorf("[nodeHealthChecking][node : %d] healcheck fall and retry over %d. will disconnect.",
+					id, n.healCheckMaxRetryCount,
 				),
 			)
 		}

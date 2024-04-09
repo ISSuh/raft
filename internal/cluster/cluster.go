@@ -46,14 +46,14 @@ type RaftCluster struct {
 
 func NewRaftCluster(config config.RaftConfig) (*RaftCluster, error) {
 	e := make(chan event.Event)
-	h := rpc.NewClusterRpcHandler(e)
+	h := rpc.NewClusterRpcHandler(e, config.Cluster.Event.Timeout)
 	c := &RaftCluster{
 		config:       config,
-		transporter:  rpc.NewRpcTransporter(config.Cluster.Address, h),
+		transporter:  rpc.NewRpcTransporter(config.Cluster.Address, config.Cluster.Transport, h),
 		eventChannel: e,
 	}
 
-	c.manager = NewNodeManager(c.onHealthCheckFail)
+	c.manager = NewNodeManager(config.Cluster.HealthCheck, c.onHealthCheckFail)
 	return c, nil
 }
 

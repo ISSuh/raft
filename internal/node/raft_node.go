@@ -209,7 +209,7 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		return r, nil
 	}
 
-	logger.Debug("[onAppendEntries] entry : %v", *msg)
+	logger.Debug("[onAppendEntries] entry : %v / len : %d", *msg, n.logs.Len())
 
 	// peer term is bigger than me.
 	n.setState(FollowerState)
@@ -267,7 +267,6 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		newLogIndex++
 	}
 
-	// TODO : need fix append log
 	// update log entries
 	if newLogIndex < newLogLen {
 		applyEntries := msg.Entries[newLogIndex:]
@@ -318,3 +317,53 @@ func (n *RaftNode) isValidPrevLogIndexAndTerm(prevLogTerm uint64, prevLogIndex i
 	}
 	return true, nil
 }
+
+// func (node *RaftNode) saveToStorage() {
+// 	node.logMutex.Lock()
+// 	defer node.logMutex.Unlock()
+
+// 	var termBuffer bytes.Buffer
+// 	if err := gob.NewEncoder(&termBuffer).Encode(node.currentTerm()); err != nil {
+// 		log.WithField("node", "node.saveToStorage").Fatal(goidForlog()+"err : ", err)
+// 		return
+// 	}
+
+// 	node.storage.Set(StorageTermKey, termBuffer.Bytes())
+
+// 	var logBuffer bytes.Buffer
+// 	if err := gob.NewEncoder(&logBuffer).Encode(node.logs); err != nil {
+// 		log.WithField("node", "node.saveToStorage").Fatal(goidForlog()+"err : ", err)
+// 		return
+// 	}
+
+// 	node.storage.Set(StorageLogKey, logBuffer.Bytes())
+
+// 	// run entry updated callback
+// 	// need redesign
+// 	go func() {
+// 		node.logMutex.Lock()
+// 		defer node.logMutex.Unlock()
+
+// 		lastEntry := node.logs[len(node.logs)-1]
+// 		node.entryHandler.EntryUpdated(lastEntry.Log)
+// 	}()
+// }
+
+// func (n *RaftNode) restoreFromStorage() {
+// 	if buffer := n.storage.Get(StorageTermKey); buffer != nil {
+// 		data := gob.NewDecoder(bytes.NewBuffer(buffer))
+// 		var term uint64 = 0
+// 		if err := data.Decode(&term); err == nil {
+// 			log.WithField("node", "node.restoreFromStorage").Fatal(goidForlog()+"err : ", err)
+// 		} else {
+// 			node.setTerm(term)
+// 		}
+// 	}
+
+// 	if buffer := node.storage.Get(StorageLogKey); buffer != nil {
+// 		data := gob.NewDecoder(bytes.NewBuffer(buffer))
+// 		if err := data.Decode(&node.logs); err != nil {
+// 			log.WithField("node", "node.restoreFromStorage").Fatal(goidForlog()+"err : ", err)
+// 		}
+// 	}
+// }

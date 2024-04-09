@@ -44,21 +44,23 @@ const (
 )
 
 type RpcTransporter struct {
-	address    config.Address
-	listener   gonet.Listener
-	rpcServer  *rpc.Server
-	rpcHandler RpcHandler
+	address         config.Address
+	transportConfig config.Transport
+	listener        gonet.Listener
+	rpcServer       *rpc.Server
+	rpcHandler      RpcHandler
 
 	quit chan bool
 	wg   sync.WaitGroup
 }
 
-func NewRpcTransporter(address config.Address, handler RpcHandler) *RpcTransporter {
+func NewRpcTransporter(address config.Address, transportConfig config.Transport, handler RpcHandler) *RpcTransporter {
 	return &RpcTransporter{
-		address:    address,
-		rpcServer:  rpc.NewServer(),
-		rpcHandler: handler,
-		quit:       make(chan bool),
+		address:         address,
+		transportConfig: transportConfig,
+		rpcServer:       rpc.NewServer(),
+		rpcHandler:      handler,
+		quit:            make(chan bool),
 	}
 }
 
@@ -134,7 +136,7 @@ func (t *RpcTransporter) ConnectNode(node *message.NodeMetadata) (net.NodeReques
 	if err != nil {
 		return nil, err
 	}
-	return NewNodeRequester(client), nil
+	return NewNodeRequester(client, t.transportConfig.RequestTimeout), nil
 }
 
 func (t *RpcTransporter) ConnectCluster(address config.Address) (net.ClusterRequester, error) {
@@ -147,5 +149,5 @@ func (t *RpcTransporter) ConnectCluster(address config.Address) (net.ClusterRequ
 	if err != nil {
 		return nil, err
 	}
-	return NewClusterRequester(client), nil
+	return NewClusterRequester(client, t.transportConfig.RequestTimeout), nil
 }

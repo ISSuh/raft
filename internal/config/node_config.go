@@ -1,7 +1,7 @@
 /*
 MIT License
 
-# Copyright (c) 2024 ISSuh
+Copyright (c) 2024 ISSuh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,18 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package event
+package config
 
-type EventChannel struct {
-	c chan Event
-}
-
-func NewEventChannel() *EventChannel {
-	return &EventChannel{
-		c: make(chan Event),
-	}
-}
-
-func (e *EventChannel) Notify(event Event) (interface{}, error) {
-	return event.Notify(e.c)
+type NodeConfig struct {
+	Id        int       `yaml:"id"`
+	Address   Address   `yaml:"address"`
+	Event     Event     `yaml:"event"`
+	Transport Transport `yaml:"transport"`
 }

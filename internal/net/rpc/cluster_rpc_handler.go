@@ -26,20 +26,29 @@ package rpc
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
+	"github.com/ISSuh/raft/internal/net"
 	"github.com/ISSuh/raft/internal/util"
 	"google.golang.org/protobuf/proto"
 )
 
 type ClusterRpcHandler struct {
 	eventChannel chan event.Event
+	eventTimeout time.Duration
 }
 
-func NewClusterRpcHandler(eventChannel chan event.Event) RpcHandler {
+func NewClusterRpcHandler(eventChannel chan event.Event, timeout int) RpcHandler {
+	eventTimeout := net.DefaultRequestTimneout
+	if timeout > 0 {
+		eventTimeout = time.Duration(timeout) * time.Millisecond
+	}
+
 	return &ClusterRpcHandler{
 		eventChannel: eventChannel,
+		eventTimeout: eventTimeout,
 	}
 }
 
@@ -172,7 +181,7 @@ func (h *ClusterRpcHandler) nodeList() (*message.NodeMetadataesList, error) {
 
 func (h *ClusterRpcHandler) notifyEvent(eventType event.EventType, message interface{}) (*event.EventResult, error) {
 	e := event.NewEvent(eventType, message)
-	result, err := e.Notify(h.eventChannel)
+	result, err := e.Notify(h.eventChannel, h.eventTimeout)
 	if err != nil {
 		return nil, err
 	}

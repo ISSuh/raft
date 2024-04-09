@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/rpc"
+	"time"
 
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
@@ -37,22 +38,39 @@ import (
 )
 
 type RpcRequester struct {
-	client *rpc.Client
+	client         *rpc.Client
+	requestTimeout time.Duration
 }
 
-func NewNodeRequester(client *rpc.Client) net.NodeRequester {
+func NewNodeRequester(client *rpc.Client, timeout int) net.NodeRequester {
+	requestTimeout := net.DefaultRequestTimneout
+	if timeout > 0 {
+		requestTimeout = time.Duration(timeout) * time.Millisecond
+	}
+
 	return &RpcRequester{
-		client: client,
+		client:         client,
+		requestTimeout: requestTimeout,
 	}
 }
 
-func NewClusterRequester(client *rpc.Client) net.ClusterRequester {
+func NewClusterRequester(client *rpc.Client, timeout int) net.ClusterRequester {
+	requestTimeout := net.DefaultRequestTimneout
+	if timeout > 0 {
+		requestTimeout = time.Duration(requestTimeout) * time.Millisecond
+	}
+
 	return &RpcRequester{
-		client: client,
+		client:         client,
+		requestTimeout: requestTimeout,
 	}
 }
 
-func (r *RpcRequester) Close() {
+func (r *RpcRequester) CloseNodeRequester() {
+	r.client.Close()
+}
+
+func (r *RpcRequester) CloseClusterRequester() {
 	r.client.Close()
 }
 
@@ -64,7 +82,8 @@ func (r *RpcRequester) HelthCheck() error {
 	}
 
 	resp := RpcResponse{}
-	return r.client.Call(RpcMethodHandle, &req, &resp)
+
+	return r.rpcCall(&req, &resp)
 }
 
 func (r *RpcRequester) NotifyNodeConnected(node *message.NodeMetadata) (bool, error) {
@@ -74,7 +93,7 @@ func (r *RpcRequester) NotifyNodeConnected(node *message.NodeMetadata) (bool, er
 	}
 
 	req, resp := r.makeRpcRequestResponse(event.NotifyNodeConnected, data)
-	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+	if err := r.rpcCall(&req, &resp); err != nil {
 		return false, err
 	}
 
@@ -107,7 +126,7 @@ func (r *RpcRequester) RequestVote(requestVoteMessage *message.RequestVote) (*me
 	}
 
 	req, resp := r.makeRpcRequestResponse(event.ReqeustVote, data)
-	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+	if err := r.rpcCall(&req, &resp); err != nil {
 		return nil, err
 	}
 
@@ -132,7 +151,7 @@ func (r *RpcRequester) AppendEntries(arg *message.AppendEntries) (*message.Appen
 	}
 
 	req, resp := r.makeRpcRequestResponse(event.AppendEntries, data)
-	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+	if err := r.rpcCall(&req, &resp); err != nil {
 		return nil, err
 	}
 
@@ -157,7 +176,7 @@ func (r *RpcRequester) NotifyMeToCluster(arg *message.NodeMetadata) (*message.No
 	}
 
 	req, resp := r.makeRpcRequestResponse(event.NotifyMeToCluster, data)
-	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+	if err := r.rpcCall(&req, &resp); err != nil {
 		return nil, err
 	}
 
@@ -175,7 +194,7 @@ func (r *RpcRequester) DisconnectNode(arg *message.NodeMetadata) error {
 	}
 
 	req, resp := r.makeRpcRequestResponse(event.DeleteNode, data)
-	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+	if err := r.rpcCall(&req, &resp); err != nil {
 		return err
 	}
 	return nil
@@ -183,7 +202,7 @@ func (r *RpcRequester) DisconnectNode(arg *message.NodeMetadata) error {
 
 func (r *RpcRequester) NodeList() (*message.NodeMetadataesList, error) {
 	req, resp := r.makeRpcRequestResponse(event.NodeList, []byte{})
-	if err := r.client.Call(RpcMethodHandle, &req, &resp); err != nil {
+	if err := r.rpcCall(&req, &resp); err != nil {
 		return nil, err
 	}
 
@@ -206,4 +225,17 @@ func (r *RpcRequester) makeRpcRequestResponse(messageType event.EventType, messa
 		Message: []byte{},
 	}
 	return req, resp
+}
+
+func (r *RpcRequester) rpcCall(req interface{}, resp interface{}) error {
+	channelBufferLen := 1
+	call := r.client.Go(RpcMethodHandle, req, resp, make(chan *rpc.Call, channelBufferLen))
+	select {
+	case <-time.After(r.requestTimeout):
+	case resp := <-call.Done:
+		if resp != nil && resp.Error != nil {
+			return resp.Error
+		}
+	}
+	return nil
 }

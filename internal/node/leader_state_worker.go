@@ -141,20 +141,20 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 			if prevIndex >= 0 {
 				appendEntriesMessage.PrevLogTerm, err = w.logs.EntryTerm(prevIndex)
 				if err != nil {
-					logger.Info("[doHeartBeat] %s", err.Error())
+					logger.Info("[doHeartBeat][id : %d] %s", peer.Id(), err.Error())
 					return
 				}
 			}
 
 			appendEntriesMessage.Entries, err = w.logs.Since(nextIndex)
 			if err != nil {
-				logger.Info("[doHeartBeat] %s", err.Error())
+				logger.Info("[doHeartBeat][id : %d], %s", peer.Id(), err.Error())
 				return
 			}
 
 			reply, err := peer.AppendEntries(appendEntriesMessage)
 			if err != nil {
-				logger.Info("[doHeartBeat] %s", err.Error())
+				logger.Info("[doHeartBeat][id : %d] %s", peer.Id(), err.Error())
 				return
 			}
 

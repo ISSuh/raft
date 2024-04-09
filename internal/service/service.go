@@ -56,10 +56,10 @@ type RaftService struct {
 
 func NewRaftService(config config.RaftConfig) *RaftService {
 	metadata := &message.NodeMetadata{
-		Id: int32(config.Server.Id),
+		Id: int32(config.Node.Id),
 		Address: &message.Address{
-			Ip:   config.Server.Address.Ip,
-			Port: int32(config.Server.Address.Port),
+			Ip:   config.Node.Address.Ip,
+			Port: int32(config.Node.Address.Port),
 		},
 	}
 
@@ -67,8 +67,8 @@ func NewRaftService(config config.RaftConfig) *RaftService {
 	nc := make(chan event.Event)
 	cc := make(chan event.Event)
 
-	h := rpc.NewNodeRpcHandler(nc, cc)
-	t := rpc.NewRpcTransporter(config.Server.Address, h)
+	h := rpc.NewNodeRpcHandler(nc, cc, config.Node.Event.Timeout)
+	t := rpc.NewRpcTransporter(config.Node.Address, config.Node.Transport, h)
 	m := node.NewPeerNodeManager(metadata, cc, t, q)
 
 	node := node.NewRaftNode(metadata, nc, m, q)

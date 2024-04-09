@@ -30,48 +30,8 @@ import (
 )
 
 const (
-	TimeoutSecond = 5 * time.Second
+	DefaultEventTimeout = 3 * time.Second
 )
-
-type EventType int
-
-const (
-	// node  event
-	NotifyNodeConnected EventType = iota
-	NotifyNodeDisconnected
-	ReqeustVote
-	Timeout
-	VoteTimeout
-	CandidateTimeout
-	AppendEntries
-	ApplyEntry
-	HealthCheck
-
-	// cluster event
-	NotifyMeToCluster
-	DeleteNode
-	NodeList
-)
-
-func (t EventType) String() string {
-	switch t {
-	case NotifyNodeConnected:
-		return "NotifyNodeConnected"
-	case ReqeustVote:
-		return "ReqeustVote"
-	case Timeout:
-		return "Timeout"
-	case VoteTimeout:
-		return "VoteTimeout"
-	case CandidateTimeout:
-		return "CandidateTimeout"
-	case AppendEntries:
-		return "AppendEntries"
-	case NotifyMeToCluster:
-		return "NotifyMeToCluster"
-	}
-	return ""
-}
 
 type EventResult struct {
 	Err    error
@@ -98,15 +58,15 @@ func (e Event) String() string {
 	return fmt.Sprintf("Event{Type:%s, Message:%+v, Timestamp:%s}", e.Type, e.Message, e.Timestamp)
 }
 
-func (e *Event) Notify(eventChannel chan Event) (*EventResult, error) {
-	eventNotifyTimeoutChan := time.After(TimeoutSecond)
+func (e *Event) Notify(eventChannel chan Event, timeout time.Duration) (*EventResult, error) {
+	eventNotifyTimeoutChan := time.After(timeout)
 	select {
 	case eventChannel <- *e:
 	case <-eventNotifyTimeoutChan:
 		return nil, fmt.Errorf("[Event.Notify] %s evnet timeout.", e.Type)
 	}
 
-	eventResultTimeoutChan := time.After(TimeoutSecond)
+	eventResultTimeoutChan := time.After(timeout)
 	select {
 	case result := <-e.EventResultChannel:
 		return result, nil
