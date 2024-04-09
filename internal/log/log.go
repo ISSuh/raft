@@ -126,7 +126,7 @@ func (l *Logs) Range(begin, end int64) ([]*message.LogEntry, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if begin < 0 || end >= int64(l.Len()) {
+	if begin < 0 || end < 0 || end >= int64(l.Len()) {
 		return nil, fmt.Errorf("[Range] invalid index. begin : %d, end : %d, len : %d", begin, end, l.Len())
 	}
 	return l.entries[begin:end], nil

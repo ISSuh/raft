@@ -164,8 +164,9 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 }
 
 func (w *LeaderStateWorker) applyAppendEntries(message *message.AppendEntriesReply, appendSuccesCount *int) bool {
-	logger.Debug("[applyAppendEntries]")
+	logger.Debug("[applyAppendEntries] message : %+v", *message)
 	if message.Term > w.currentTerm() {
+		w.timer.Stop()
 		w.setState(FollowerState)
 		w.setTerm(message.Term)
 		return false
@@ -187,5 +188,6 @@ func (w *LeaderStateWorker) applyAppendEntries(message *message.AppendEntriesRep
 	w.logs.UpdateMatchIndex(peerId, newMatchIndex)
 
 	*appendSuccesCount++
+
 	return true
 }

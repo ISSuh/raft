@@ -177,7 +177,6 @@ func (n *RaftNode) onRequestVote(e event.Event) (*message.RequestVoteReply, erro
 	}
 
 	// TODO : need implement case of same term of request and my term
-	logger.Debug("[onRequestVote] current term : %d, message : %+v", n.term, *requestVoteMessage)
 	reply := &message.RequestVoteReply{}
 	if requestVoteMessage.Term > n.currentTerm() {
 		n.setTerm(requestVoteMessage.Term)
@@ -275,7 +274,7 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		if err := n.logs.AppendLogSinceToIndex(logIndex, applyEntries); err != nil {
 			return nil, err
 		}
-		applyEntriesLen = int64(newLogLen - newLogIndex)
+		applyEntriesLen = int64(newLogLen)
 	}
 
 	// commit
