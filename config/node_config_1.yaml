@@ -1,17 +1,21 @@
-
 raft:
+  # cluster address
   cluster:
     address:
       ip: 127.0.0.1
       port: 33221
   node:
+    # uniq node id
     id: 1
+    # node address
     address:
       ip: 0.0.0.0
       port: 33225
     event:
+      # timeout on rpc request
       # millisecond
       timeout: 1000
     transport:
+      # timeout on rpc request
       # millisecond
       request_timeout: 1000

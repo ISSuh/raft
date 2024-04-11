@@ -1,4 +1,3 @@
-
 raft:
   cluster:
     address:
@@ -14,4 +13,3 @@ raft:
       # millisecond
       timer: 500
       retry_count: 3
-

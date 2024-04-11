@@ -1,4 +1,3 @@
-
 raft:
   cluster:
     address:
@@ -10,8 +9,6 @@ raft:
       ip: 0.0.0.0
       port: 33227
     event:
-      # millisecond
       timeout: 1000
     transport:
-      # millisecond
       request_timeout: 1000
