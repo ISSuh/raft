@@ -58,6 +58,7 @@ type ClusterRequester interface {
 	NodeList() (*message.NodeMetadataesList, error)
 }
 
+//go:generate mockery --name TransporterMock --case underscore --inpackage
 type Transporter interface {
 	Serve(context context.Context) error
 	StopAndWait()

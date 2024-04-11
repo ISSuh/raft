@@ -46,11 +46,12 @@ const (
 type RpcTransporter struct {
 	address         config.Address
 	transportConfig config.Transport
-	listener        gonet.Listener
-	rpcServer       *rpc.Server
-	rpcHandler      RpcHandler
 
-	quit chan bool
+	listener   gonet.Listener
+	rpcServer  *rpc.Server
+	rpcHandler RpcHandler
+
+	quit chan struct{}
 	wg   sync.WaitGroup
 }
 
@@ -60,7 +61,7 @@ func NewRpcTransporter(address config.Address, transportConfig config.Transport,
 		transportConfig: transportConfig,
 		rpcServer:       rpc.NewServer(),
 		rpcHandler:      handler,
-		quit:            make(chan bool),
+		quit:            make(chan struct{}),
 	}
 }
 
@@ -70,7 +71,10 @@ func (t *RpcTransporter) Serve(context context.Context) error {
 }
 
 func (t *RpcTransporter) StopAndWait() {
-	t.quit <- true
+	t.listener.Close()
+	t.quit <- struct{}{}
+
+	close(t.quit)
 	t.wg.Wait()
 }
 

@@ -51,7 +51,7 @@ var testClusterConfig config.Config = config.Config{
 
 var testNodeConfig config.Config = config.Config{
 	Raft: config.RaftConfig{
-		Server: config.ServerConfig{
+		Node: config.NodeConfig{
 			Id: 0,
 			Address: config.Address{
 				Ip:   "127.0.0.1",
@@ -166,21 +166,28 @@ func (m *mockNodeRpcHandler) processNodeListEvent(req *RpcRequest, resp *RpcResp
 func newTestRequester() (net.NodeRequester, error) {
 	testConfig := config.Config{
 		Raft: config.RaftConfig{
-			Server: config.ServerConfig{
+			Node: config.NodeConfig{
+				Id: 0,
 				Address: config.Address{
 					Ip:   "127.0.0.1",
-					Port: 22455,
+					Port: 33158,
+				},
+				Event: config.Event{
+					Timeout: 1000,
+				},
+				Transport: config.Transport{
+					RequestTimeout: 1000,
 				},
 			},
 		},
 	}
-	transporter := NewRpcTransporter(testConfig.Raft.Server.Address, nil)
+	transporter := NewRpcTransporter(testConfig.Raft.Node.Address, testConfig.Raft.Node.Transport, nil)
 
 	node := &message.NodeMetadata{
 		Id: 1,
 		Address: &message.Address{
-			Ip:   testNodeConfig.Raft.Server.Address.Ip,
-			Port: int32(testNodeConfig.Raft.Server.Address.Port),
+			Ip:   testNodeConfig.Raft.Node.Address.Ip,
+			Port: int32(testNodeConfig.Raft.Node.Address.Port),
 		},
 	}
 	return transporter.ConnectNode(node)
@@ -190,12 +197,16 @@ func TestMain(m *testing.M) {
 	c, nodeCancel := context.WithCancel(context.Background())
 	mockHandler = newMockHandler()
 
-	nodeTransporter = NewRpcTransporter(testNodeConfig.Raft.Server.Address, mockHandler)
+	nodeTransporter = NewRpcTransporter(
+		testNodeConfig.Raft.Node.Address, testNodeConfig.Raft.Node.Transport, mockHandler,
+	)
 	if err := nodeTransporter.Serve(c); err != nil {
 		os.Exit(0)
 	}
 
-	clusterTransporter = NewRpcTransporter(testClusterConfig.Raft.Cluster.Address, mockHandler)
+	clusterTransporter = NewRpcTransporter(
+		testClusterConfig.Raft.Cluster.Address, testClusterConfig.Raft.Cluster.Transport, mockHandler,
+	)
 	if err := clusterTransporter.Serve(c); err != nil {
 		os.Exit(0)
 	}

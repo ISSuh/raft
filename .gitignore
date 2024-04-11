@@ -27,3 +27,6 @@ go.work
 vendor
 
 .DS_STORE
+
+mocks
+mock_*
