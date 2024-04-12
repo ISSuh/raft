@@ -71,7 +71,7 @@ func NewNode(metadata *message.NodeMetadata) *Node {
 }
 
 func (n *Node) String() string {
-	return fmt.Sprint("Node{meta:%s, state:%s, term:%d}", n.meta, n.state, n.term)
+	return fmt.Sprintf("Node{meta:%s, state:%s, term:%d}", n.meta, n.state, n.term)
 }
 
 func (n *Node) currentState() State {

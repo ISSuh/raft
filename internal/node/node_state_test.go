@@ -28,17 +28,34 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ISSuh/raft/internal/message"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewNode(t *testing.T) {
-	nodeState := NewNode()
+	meta := &message.NodeMetadata{
+		Id: 0,
+		Address: &message.Address{
+			Ip:   "0.0.0.0",
+			Port: 32222,
+		},
+	}
+
+	nodeState := NewNode(meta)
 	assert.Equal(t, nodeState.state, FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 }
 
 func TestSetState(t *testing.T) {
-	nodeState := NewNode()
+	meta := &message.NodeMetadata{
+		Id: 0,
+		Address: &message.Address{
+			Ip:   "0.0.0.0",
+			Port: 32222,
+		},
+	}
+
+	nodeState := NewNode(meta)
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
@@ -47,7 +64,15 @@ func TestSetState(t *testing.T) {
 }
 
 func TestSetTerm(t *testing.T) {
-	nodeState := NewNode()
+	meta := &message.NodeMetadata{
+		Id: 0,
+		Address: &message.Address{
+			Ip:   "0.0.0.0",
+			Port: 32222,
+		},
+	}
+
+	nodeState := NewNode(meta)
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
@@ -56,7 +81,15 @@ func TestSetTerm(t *testing.T) {
 }
 
 func TestInscreaseTerm(t *testing.T) {
-	nodeState := NewNode()
+	meta := &message.NodeMetadata{
+		Id: 0,
+		Address: &message.Address{
+			Ip:   "0.0.0.0",
+			Port: 32222,
+		},
+	}
+
+	nodeState := NewNode(meta)
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
@@ -65,7 +98,15 @@ func TestInscreaseTerm(t *testing.T) {
 }
 
 func TestConcurrencyIncrease(t *testing.T) {
-	nodeState := NewNode()
+	meta := &message.NodeMetadata{
+		Id: 0,
+		Address: &message.Address{
+			Ip:   "0.0.0.0",
+			Port: 32222,
+		},
+	}
+
+	nodeState := NewNode(meta)
 	assert.Equal(t, nodeState.currentState(), FollowerState)
 	assert.Equal(t, nodeState.currentTerm(), uint64(0))
 
