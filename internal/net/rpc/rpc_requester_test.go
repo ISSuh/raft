@@ -25,152 +25,52 @@ SOFTWARE.
 package rpc
 
 import (
+	"bytes"
 	"context"
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/ISSuh/raft/internal/config"
 	"github.com/ISSuh/raft/internal/event"
 	"github.com/ISSuh/raft/internal/message"
 	"github.com/ISSuh/raft/internal/net"
+	"github.com/ISSuh/raft/internal/util"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
-var testClusterConfig config.Config = config.Config{
+var defaultNodeConfig config.Config = config.Config{
 	Raft: config.RaftConfig{
 		Cluster: config.ClussterConfig{
 			Address: config.Address{
 				Ip:   "127.0.0.1",
-				Port: 22450,
+				Port: 33121,
 			},
 		},
-	},
-}
-
-var testNodeConfig config.Config = config.Config{
-	Raft: config.RaftConfig{
 		Node: config.NodeConfig{
 			Id: 0,
 			Address: config.Address{
 				Ip:   "127.0.0.1",
-				Port: 22451,
+				Port: 33122,
+			},
+			Event: config.Event{
+				Timeout: 1000,
+			},
+			Transport: config.Transport{
+				RequestTimeout: 1000,
 			},
 		},
 	},
 }
 
-var nodeTransporter *RpcTransporter = nil
-var clusterTransporter *RpcTransporter = nil
-var mockHandler *mockNodeRpcHandler = nil
-
-type mockNodeRpcHandler struct {
-	Called map[event.EventType]bool
-}
-
-func newMockHandler() *mockNodeRpcHandler {
-	return &mockNodeRpcHandler{
-		Called: make(map[event.EventType]bool),
-	}
-}
-
-func (m *mockNodeRpcHandler) Clear() {
-	m.Called = make(map[event.EventType]bool)
-}
-
-func (m *mockNodeRpcHandler) Handle(req *RpcRequest, resp *RpcResponse) error {
-	var err error
-	switch req.Type {
-	case event.HealthCheck:
-		err = m.HelthCheck(req, resp)
-	case event.NotifyNodeConnected:
-		err = m.processNotifyMeToNodeEvent(req, resp)
-	case event.ReqeustVote:
-		err = m.processRequestVoteEvent(req, resp)
-	case event.AppendEntries:
-		err = m.processAppendEntriesEvent(req, resp)
-	case event.ApplyEntry:
-		err = m.processApplyEntryEvent(req, resp)
-	case event.NotifyMeToCluster:
-		err = m.processNotifyMeToClusterEvent(req, resp)
-	case event.DeleteNode:
-		err = m.processDeleteNodeEvent(req, resp)
-	case event.NodeList:
-		err = m.processNodeListEvent(req, resp)
-	}
-	return err
-}
-
-func (m *mockNodeRpcHandler) HelthCheck(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.HealthCheck] = true
-
-	resp.Id = req.Id
-	resp.Message = []byte{byte(1)}
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processNotifyMeToNodeEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.NotifyNodeConnected] = true
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processRequestVoteEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.ReqeustVote] = true
-
-	requestVote := &message.RequestVote{}
-	err := proto.Unmarshal(req.Message, requestVote)
-	if err != nil {
-		return fmt.Errorf("[processRequestVoteEvent] invalid message. %v\n", req.Message)
-	}
-
-	requestVoteReply := &message.RequestVoteReply{
-		Term:        requestVote.Term,
-		VoteGranted: true,
-	}
-	resultMessage, err := proto.Marshal(requestVoteReply)
-	if err != nil {
-		return err
-	}
-
-	resp.Id = req.Id
-	resp.Message = resultMessage
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processAppendEntriesEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.AppendEntries] = true
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processApplyEntryEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.ApplyEntry] = true
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processNotifyMeToClusterEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.NotifyMeToCluster] = true
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processDeleteNodeEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.DeleteNode] = true
-	return nil
-}
-
-func (m *mockNodeRpcHandler) processNodeListEvent(req *RpcRequest, resp *RpcResponse) error {
-	m.Called[event.NodeList] = true
-	return nil
-}
-
-func newTestRequester() (net.NodeRequester, error) {
+func newTestRequesterForRequester(peerAddress config.Address) (net.NodeRequester, error) {
 	testConfig := config.Config{
 		Raft: config.RaftConfig{
 			Node: config.NodeConfig{
 				Id: 0,
 				Address: config.Address{
 					Ip:   "127.0.0.1",
-					Port: 33158,
+					Port: util.RandRange(30000, 65536),
 				},
 				Event: config.Event{
 					Timeout: 1000,
@@ -181,71 +81,202 @@ func newTestRequester() (net.NodeRequester, error) {
 			},
 		},
 	}
+
 	transporter := NewRpcTransporter(testConfig.Raft.Node.Address, testConfig.Raft.Node.Transport, nil)
 
 	node := &message.NodeMetadata{
 		Id: 1,
 		Address: &message.Address{
-			Ip:   testNodeConfig.Raft.Node.Address.Ip,
-			Port: int32(testNodeConfig.Raft.Node.Address.Port),
+			Ip:   peerAddress.Ip,
+			Port: int32(peerAddress.Port),
 		},
 	}
 	return transporter.ConnectNode(node)
 }
 
-func TestMain(m *testing.M) {
-	c, nodeCancel := context.WithCancel(context.Background())
-	mockHandler = newMockHandler()
+func runMockClusterForRequster(t *testing.T, c context.Context, config config.ClussterConfig) *RpcTransporter {
+	h := &MockRpcHandler{}
+	h.On("Handle", mock.Anything, mock.Anything).Return(nil)
 
-	nodeTransporter = NewRpcTransporter(
-		testNodeConfig.Raft.Node.Address, testNodeConfig.Raft.Node.Transport, mockHandler,
-	)
-	if err := nodeTransporter.Serve(c); err != nil {
-		os.Exit(0)
-	}
+	transporter := NewRpcTransporter(config.Address, config.Transport, h)
+	err := transporter.Serve(c)
+	require.NoError(t, err)
+	return transporter
+}
 
-	clusterTransporter = NewRpcTransporter(
-		testClusterConfig.Raft.Cluster.Address, testClusterConfig.Raft.Cluster.Transport, mockHandler,
-	)
-	if err := clusterTransporter.Serve(c); err != nil {
-		os.Exit(0)
-	}
-
-	exitVal := m.Run()
-
-	nodeCancel()
-	os.Exit(exitVal)
+func runMockNodeForRequster(t *testing.T, c context.Context, config config.NodeConfig, h RpcHandler) *RpcTransporter {
+	transporter := NewRpcTransporter(config.Address, config.Transport, h)
+	err := transporter.Serve(c)
+	require.NoError(t, err)
+	return transporter
 }
 
 func TestHealthCheck(t *testing.T) {
-	requester, err := newTestRequester()
-	require.Nil(t, err)
+	// given
+	config := defaultNodeConfig
+	config.Raft.Cluster.Address.Port = util.RandRange(30000, 65536)
+	config.Raft.Node.Address.Port = util.RandRange(30000, 65536)
 
+	mockHandler := &MockRpcHandler{}
+	mockHandler.On("Handle", mock.Anything, mock.Anything).Return(nil)
+	peer := runMockNodeForRequster(t, context.Background(), config.Raft.Node, mockHandler)
+
+	requester, err := newTestRequesterForRequester(config.Raft.Node.Address)
+	require.NoError(t, err)
+	require.NotNil(t, requester)
+
+	// when
 	err = requester.HelthCheck()
-	require.Nil(t, err)
 
-	require.True(t, mockHandler.Called[event.HealthCheck])
+	// then
+	require.NoError(t, err)
+	mockHandler.AssertExpectations(t)
 
-	mockHandler.Clear()
+	peer.StopAndWait()
 }
 
-func TestRequestVote(t *testing.T) {
-	requester, err := newTestRequester()
-	require.Nil(t, err)
+func TestHealthCheckFail(t *testing.T) {
+	// given
+	config := defaultNodeConfig
+	config.Raft.Cluster.Address.Port = util.RandRange(30000, 65536)
+	config.Raft.Node.Address.Port = util.RandRange(30000, 65536)
+
+	mockHandler := &MockRpcHandler{}
+	mockHandler.On("Handle", mock.Anything, mock.Anything).Return(nil)
+	peer := runMockNodeForRequster(t, context.Background(), config.Raft.Node, mockHandler)
+
+	requester, err := newTestRequesterForRequester(config.Raft.Node.Address)
+	require.NoError(t, err)
+	require.NotNil(t, requester)
+
+	peer.StopAndWait()
+
+	// when
+	err = requester.HelthCheck()
+
+	// then
+	require.Error(t, err)
+}
+
+func TestRequestVoteOkVote(t *testing.T) {
+	// given
+	config := defaultNodeConfig
+	config.Raft.Cluster.Address.Port = util.RandRange(30000, 65536)
+	config.Raft.Node.Address.Port = util.RandRange(30000, 65536)
 
 	TestTerm := uint64(5)
 	TestCandidateId := int32(1)
-	message := &message.RequestVote{
+	m := &message.RequestVote{
 		Term:        TestTerm,
 		CandidateId: TestCandidateId,
 	}
 
-	requestVoteReply, err := requester.RequestVote(message)
+	p := &message.RequestVoteReply{
+		Term:        TestTerm,
+		VoteGranted: true,
+	}
+
+	requestId := uint32(0)
+	matchRequst := func(req *RpcRequest) bool {
+		requestId = req.Id
+		if req.Type != event.ReqeustVote {
+			return false
+		}
+
+		msg, err := proto.Marshal(m)
+		if err != nil || !bytes.Equal(msg, req.Message) {
+			return false
+		}
+		return true
+	}
+
+	matchResponse := func(resp *RpcResponse) bool {
+		msg, err := proto.Marshal(p)
+		if err != nil {
+			return false
+		}
+
+		resp.Id = requestId
+		resp.Message = msg
+		return true
+	}
+
+	mockHandler := &MockRpcHandler{}
+	mockHandler.On("Handle", mock.MatchedBy(matchRequst), mock.MatchedBy(matchResponse)).Return(nil)
+	runMockNodeForRequster(t, context.Background(), config.Raft.Node, mockHandler)
+
+	requester, err := newTestRequesterForRequester(config.Raft.Node.Address)
+	require.NoError(t, err)
+	require.NotNil(t, requester)
+
+	// whern
+	requestVoteReply, err := requester.RequestVote(m)
+
+	// then
 	require.Nil(t, err)
-
-	require.True(t, mockHandler.Called[event.ReqeustVote])
-	require.Equal(t, requestVoteReply.Term, TestTerm)
+	mockHandler.AssertExpectations(t)
+	require.Equal(t, p.Term, requestVoteReply.Term)
 	require.True(t, requestVoteReply.VoteGranted)
+}
 
-	mockHandler.Clear()
+func TestRequestVoteFalseVote(t *testing.T) {
+	// given
+	config := defaultNodeConfig
+	config.Raft.Cluster.Address.Port = util.RandRange(30000, 65536)
+	config.Raft.Node.Address.Port = util.RandRange(30000, 65536)
+
+	TestTerm := uint64(5)
+	TestCandidateId := int32(1)
+	m := &message.RequestVote{
+		Term:        TestTerm,
+		CandidateId: TestCandidateId,
+	}
+
+	p := &message.RequestVoteReply{
+		Term:        TestTerm + 1,
+		VoteGranted: false,
+	}
+
+	requestId := uint32(0)
+	matchRequst := func(req *RpcRequest) bool {
+		requestId = req.Id
+		if req.Type != event.ReqeustVote {
+			return false
+		}
+
+		msg, err := proto.Marshal(m)
+		if err != nil || !bytes.Equal(msg, req.Message) {
+			return false
+		}
+		return true
+	}
+
+	matchResponse := func(resp *RpcResponse) bool {
+		msg, err := proto.Marshal(p)
+		if err != nil {
+			return false
+		}
+
+		resp.Id = requestId
+		resp.Message = msg
+		return true
+	}
+
+	mockHandler := &MockRpcHandler{}
+	mockHandler.On("Handle", mock.MatchedBy(matchRequst), mock.MatchedBy(matchResponse)).Return(nil)
+	runMockNodeForRequster(t, context.Background(), config.Raft.Node, mockHandler)
+
+	requester, err := newTestRequesterForRequester(config.Raft.Node.Address)
+	require.NoError(t, err)
+	require.NotNil(t, requester)
+
+	// whern
+	requestVoteReply, err := requester.RequestVote(m)
+
+	// then
+	require.Nil(t, err)
+	mockHandler.AssertExpectations(t)
+	require.Greater(t, requestVoteReply.Term, m.Term)
+	require.Equal(t, p.Term, requestVoteReply.Term)
+	require.False(t, requestVoteReply.VoteGranted)
 }

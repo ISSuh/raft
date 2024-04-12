@@ -106,3 +106,7 @@ func BooleanByteSliceToBool(value []byte) bool {
 	}
 	return false
 }
+
+func RandRange(min, max int) int {
+	return rand.Intn(max-min) + min
+}

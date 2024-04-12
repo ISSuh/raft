@@ -99,7 +99,7 @@ func (r *RpcRequester) NotifyNodeConnected(node *message.NodeMetadata) (bool, er
 
 	if req.Id != resp.Id {
 		return false,
-			fmt.Errorf("[RpcRequestor.RequestVote] not matched request, respnse id. [request id = %d, response id = %d]",
+			fmt.Errorf("[RequestVote] not matched request, respnse id. [request id = %d, response id = %d]",
 				req.Id, resp.Id,
 			)
 	}
