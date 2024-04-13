@@ -68,6 +68,7 @@ func (w *LeaderStateWorker) Work(c context.Context) {
 
 	for w.currentState() == LeaderState {
 		if needHeartBeat {
+			appendSuccesCount = 0
 			peersLen := w.peerNodeManager.numberOfPeer()
 			replyChan = make(chan *message.AppendEntriesReply, peersLen)
 			w.doHeartBeat(replyChan)
@@ -95,23 +96,24 @@ func (w *LeaderStateWorker) Work(c context.Context) {
 				continue
 			}
 
-			poerNodeNum := w.peerNodeManager.numberOfPeer()
-			majorityCount := (poerNodeNum / 2) + 1
-			if appendSuccesCount == majorityCount {
-				newCommitIndex := int64(w.logs.Len()) - 1
-				w.logs.UpdateCommitIndex(newCommitIndex)
-			}
+			w.updateCommitIndexIfPossible(&appendSuccesCount)
 		case e := <-w.eventProcessor.WaitUntilEmit():
 			result, err := w.eventProcessor.ProcessEvent(e)
 			if err != nil {
-				logger.Info("[Work] %s\n", err.Error())
+				logger.Info("[Work] err :  %s\n", err.Error())
 			}
 
-			// TODO: need timer reset when fit recived appendEntry from leader
+			if w.currentState() != LeaderState {
+				w.timer.Stop()
+				close(replyChan)
+			}
 
-			e.EventResultChannel <- &event.EventResult{
+			eventResult := &event.EventResult{
 				Err:    err,
 				Result: result,
+			}
+			if err := e.Reply(eventResult); err != nil {
+				logger.Info("[Work] err :  %s\n", err.Error())
 			}
 		}
 	}
@@ -141,24 +143,29 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 			if prevIndex >= 0 {
 				appendEntriesMessage.PrevLogTerm, err = w.logs.EntryTerm(prevIndex)
 				if err != nil {
-					logger.Info("[doHeartBeat][id : %d] %s", peer.Id(), err.Error())
+					logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.meta.Id, peer.Id(), err.Error())
 					return
 				}
 			}
 
 			appendEntriesMessage.Entries, err = w.logs.Since(nextIndex)
 			if err != nil {
-				logger.Info("[doHeartBeat][id : %d], %s", peer.Id(), err.Error())
+				logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.meta.Id, peer.Id(), err.Error())
 				return
 			}
 
 			reply, err := peer.AppendEntries(appendEntriesMessage)
 			if err != nil {
-				logger.Info("[doHeartBeat][id : %d] %s", peer.Id(), err.Error())
+				logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.meta.Id, peer.Id(), err.Error())
 				return
 			}
 
-			replyChan <- reply
+			select {
+			case replyChan <- reply:
+			default:
+				logger.Info("[doHeartBeat][node : %d, peer id : %d] reply channel closed", w.meta.Id, peer.Id())
+			}
+
 		}(peer, replyChan)
 	}
 }
@@ -190,4 +197,13 @@ func (w *LeaderStateWorker) applyAppendEntries(message *message.AppendEntriesRep
 	*appendSuccesCount++
 
 	return true
+}
+
+func (w *LeaderStateWorker) updateCommitIndexIfPossible(appendSuccesCount *int) {
+	poerNodeNum := w.peerNodeManager.numberOfPeer()
+	majorityCount := (poerNodeNum / 2) + 1
+	if *appendSuccesCount == majorityCount {
+		newCommitIndex := int64(w.logs.Len()) - 1
+		w.logs.UpdateCommitIndex(newCommitIndex)
+	}
 }

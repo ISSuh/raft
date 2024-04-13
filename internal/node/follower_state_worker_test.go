@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWork(t *testing.T) {
+func TestFollowerWork(t *testing.T) {
 	meta := &message.NodeMetadata{
 		Id: 0,
 	}
@@ -59,7 +59,7 @@ func TestWork(t *testing.T) {
 	require.Equal(t, CandidateState, n.currentState())
 }
 
-func TestWorkStop(t *testing.T) {
+func TestFollowerWorkStop(t *testing.T) {
 	meta := &message.NodeMetadata{
 		Id: 0,
 	}
@@ -115,7 +115,7 @@ func TestWorkStop(t *testing.T) {
 	})
 }
 
-func TestWorkEvent(t *testing.T) {
+func TestFollowerWorkEvent(t *testing.T) {
 	meta := &message.NodeMetadata{
 		Id: 0,
 	}
@@ -186,7 +186,7 @@ func TestWorkEvent(t *testing.T) {
 	})
 }
 
-func TestWorkFail(t *testing.T) {
+func TestFollowerWorkFail(t *testing.T) {
 	meta := &message.NodeMetadata{
 		Id: 0,
 	}
@@ -238,7 +238,7 @@ func TestWorkFail(t *testing.T) {
 	})
 }
 
-func TestWorkEventFail(t *testing.T) {
+func TestFollowerWorkEventFail(t *testing.T) {
 	meta := &message.NodeMetadata{
 		Id: 0,
 	}

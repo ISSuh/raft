@@ -155,12 +155,15 @@ func (m *PeerNodeManager) clusterEventLoop(c context.Context) {
 		case e := <-m.WaitUntilEmit():
 			result, err := m.ProcessEvent(e)
 			if err != nil {
-				logger.Info("[clusterEventLoop] %s\n", err.Error())
+				logger.Info("[clusterEventLoop] err : %s\n", err.Error())
 			}
 
-			e.EventResultChannel <- &event.EventResult{
+			eventResult := &event.EventResult{
 				Err:    err,
 				Result: result,
+			}
+			if err := e.Reply(eventResult); err != nil {
+				logger.Info("[clusterEventLoop] err :  %s\n", err.Error())
 			}
 		}
 	}
