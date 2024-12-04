@@ -35,7 +35,7 @@ func main() {
 	logPrefix := "log_0"
 	for {
 		log := logPrefix + strconv.Itoa(count)
-		node.AppendLog([]byte(log))
+		node.Apply([]byte(log))
 
 		count++
 		time.Sleep(1 * time.Second)

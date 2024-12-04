@@ -63,7 +63,7 @@ func (e *Event) Notify(eventChannel chan Event, timeout time.Duration) (*EventRe
 	select {
 	case eventChannel <- *e:
 	case <-eventNotifyTimeoutChan:
-		return nil, fmt.Errorf("[Notify] %s evnet timeout.", e.Type)
+		return nil, fmt.Errorf("[Notify] %s evnet push timeout.", e.Type)
 	}
 
 	eventResultTimeoutChan := time.After(timeout)
@@ -71,7 +71,7 @@ func (e *Event) Notify(eventChannel chan Event, timeout time.Duration) (*EventRe
 	case result := <-e.EventResultChannel:
 		return result, nil
 	case <-eventResultTimeoutChan:
-		return nil, fmt.Errorf("[Notify] %s evnet timeout.", e.Type)
+		return nil, fmt.Errorf("[Notify] %s result evnet timeout.", e.Type)
 	}
 }
 

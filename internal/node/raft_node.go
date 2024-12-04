@@ -210,8 +210,6 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		return r, nil
 	}
 
-	logger.Debug("[onAppendEntries] entry : %v / len : %d", *msg, n.logs.Len())
-
 	// peer term is bigger than me.
 	n.setState(FollowerState)
 	n.setTerm(msg.Term)
@@ -250,11 +248,7 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 	newLogIndex := 0
 	newLogLen := len(msg.Entries)
 	applyEntriesLen := int64(0)
-	for {
-		if (logIndex >= int64(logLen)) || (newLogIndex >= newLogLen) {
-			break
-		}
-
+	for logIndex < int64(logLen) && newLogIndex < newLogLen {
 		term, err := n.logs.EntryTerm(logIndex)
 		if err != nil {
 			return nil, err
@@ -284,6 +278,8 @@ func (n *RaftNode) onAppendEntries(e event.Event) (*message.AppendEntriesReply, 
 		updatedLogIndex := int64(updatedlogLen - 1)
 		newCommitIndex := util.Min(msg.LeaderCommitIndex, updatedLogIndex)
 		n.logs.UpdateCommitIndex(newCommitIndex)
+
+		logger.Debug("[onAppendEntries] commitIndex : %d, newCommitIndex : %d", commitIndex, newCommitIndex)
 
 		// need commit log to storage
 	}

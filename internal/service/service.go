@@ -107,6 +107,6 @@ func (s *RaftService) Serve(context context.Context) error {
 	return nil
 }
 
-func (s *RaftService) AppendLog(command []byte) error {
+func (s *RaftService) Apply(command []byte) error {
 	return s.node.Submit(command)
 }

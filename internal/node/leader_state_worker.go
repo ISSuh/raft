@@ -37,7 +37,7 @@ import (
 )
 
 type LeaderStateWorker struct {
-	*Node
+	node            *Node
 	logs            *log.Logs
 	timer           *time.Timer
 	peerNodeManager *PeerNodeManager
@@ -50,7 +50,7 @@ func NewLeaderStateWorker(
 	node *Node, logs *log.Logs, peerNodeManager *PeerNodeManager, eventProcessor event.EventProcessor, quit chan struct{},
 ) Worker {
 	return &LeaderStateWorker{
-		Node:            node,
+		node:            node,
 		logs:            logs,
 		peerNodeManager: peerNodeManager,
 		eventProcessor:  eventProcessor,
@@ -66,7 +66,7 @@ func (w *LeaderStateWorker) Work(c context.Context) {
 	needHeartBeat := true
 	appendSuccesCount := 0
 
-	for w.currentState() == LeaderState {
+	for w.node.currentState() == LeaderState {
 		if needHeartBeat {
 			appendSuccesCount = 0
 			peersLen := w.peerNodeManager.numberOfPeer()
@@ -85,10 +85,10 @@ func (w *LeaderStateWorker) Work(c context.Context) {
 		select {
 		case <-c.Done():
 			logger.Info("[Work] context done\n")
-			w.setState(StopState)
+			w.node.setState(StopState)
 		case <-w.quit:
 			logger.Info("[Work] force quit\n")
-			w.setState(StopState)
+			w.node.setState(StopState)
 		case <-w.timer.C:
 			needHeartBeat = true
 		case reply := <-replyChan:
@@ -103,7 +103,7 @@ func (w *LeaderStateWorker) Work(c context.Context) {
 				logger.Info("[Work] err :  %s\n", err.Error())
 			}
 
-			if w.currentState() != LeaderState {
+			if w.node.currentState() != LeaderState {
 				w.timer.Stop()
 				close(replyChan)
 			}
@@ -129,8 +129,8 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 
 			var err error
 			appendEntriesMessage := &message.AppendEntries{
-				Term:              w.currentTerm(),
-				LeaderId:          w.leaderId,
+				Term:              w.node.currentTerm(),
+				LeaderId:          w.node.leaderId,
 				PrevLogIndex:      -1,
 				PrevLogTerm:       0,
 				Entries:           make([]*message.LogEntry, 0),
@@ -143,27 +143,27 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 			if prevIndex >= 0 {
 				appendEntriesMessage.PrevLogTerm, err = w.logs.EntryTerm(prevIndex)
 				if err != nil {
-					logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.meta.Id, peer.Id(), err.Error())
+					logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.node.meta.Id, peer.Id(), err.Error())
 					return
 				}
 			}
 
 			appendEntriesMessage.Entries, err = w.logs.Since(nextIndex)
 			if err != nil {
-				logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.meta.Id, peer.Id(), err.Error())
+				logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.node.meta.Id, peer.Id(), err.Error())
 				return
 			}
 
 			reply, err := peer.AppendEntries(appendEntriesMessage)
 			if err != nil {
-				logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.meta.Id, peer.Id(), err.Error())
+				logger.Info("[doHeartBeat][node : %d, peer id : %d] %s", w.node.meta.Id, peer.Id(), err.Error())
 				return
 			}
 
 			select {
 			case replyChan <- reply:
 			default:
-				logger.Info("[doHeartBeat][node : %d, peer id : %d] reply channel closed", w.meta.Id, peer.Id())
+				logger.Info("[doHeartBeat][node : %d, peer id : %d] reply channel closed", w.node.meta.Id, peer.Id())
 			}
 
 		}(peer, replyChan)
@@ -172,10 +172,10 @@ func (w *LeaderStateWorker) doHeartBeat(replyChan chan *message.AppendEntriesRep
 
 func (w *LeaderStateWorker) applyAppendEntries(message *message.AppendEntriesReply, appendSuccesCount *int) bool {
 	logger.Debug("[applyAppendEntries] message : %+v", *message)
-	if message.Term > w.currentTerm() {
+	if message.Term > w.node.currentTerm() {
 		w.timer.Stop()
-		w.setState(FollowerState)
-		w.setTerm(message.Term)
+		w.node.setState(FollowerState)
+		w.node.setTerm(message.Term)
 		return false
 	}
 

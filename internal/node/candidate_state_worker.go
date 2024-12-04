@@ -36,7 +36,7 @@ import (
 )
 
 type CandidateStateWorker struct {
-	*Node
+	node            *Node
 	timer           *time.Timer
 	peerNodeManager *PeerNodeManager
 	eventProcessor  event.EventProcessor
@@ -48,7 +48,7 @@ func NewCandidateStateWorker(
 	node *Node, peerNodeManager *PeerNodeManager, eventProcessor event.EventProcessor, quit chan struct{},
 ) Worker {
 	return &CandidateStateWorker{
-		Node:            node,
+		node:            node,
 		peerNodeManager: peerNodeManager,
 		eventProcessor:  eventProcessor,
 		quit:            quit,
@@ -60,13 +60,13 @@ func (w *CandidateStateWorker) Work(c context.Context) {
 	var replyChan chan *message.RequestVoteReply
 	electionGrantedCount := 0
 	needEraction := true
-	w.leaderId = -1
+	w.node.leaderId = -1
 
-	for w.currentState() == CandidateState {
+	for w.node.currentState() == CandidateState {
 		if needEraction {
-			w.increaseTerm()
+			w.node.increaseTerm()
 			electionGrantedCount++
-			w.leaderId = w.meta.Id
+			w.node.leaderId = w.node.meta.Id
 
 			replyChan = w.doEraction()
 
@@ -91,29 +91,29 @@ func (w *CandidateStateWorker) Work(c context.Context) {
 		)
 
 		if electionGrantedCount == majorityCount {
-			w.setState(LeaderState)
+			w.node.setState(LeaderState)
 			return
 		}
 
 		select {
 		case <-c.Done():
 			logger.Info("[Work] context done")
-			w.setState(StopState)
+			w.node.setState(StopState)
 		case <-w.quit:
 			logger.Info("[Work] force quit")
-			w.setState(StopState)
+			w.node.setState(StopState)
 		case <-w.timer.C:
 			logger.Info("[Work] timeout")
 			needEraction = true
 			electionGrantedCount = 0
-			w.setTerm(w.currentTerm() - 1)
+			w.node.setTerm(w.node.currentTerm() - 1)
 		case reply := <-replyChan:
-			if reply.Term > w.currentTerm() {
-				w.setState(FollowerState)
+			if reply.Term > w.node.currentTerm() {
+				w.node.setState(FollowerState)
 				return
 			}
 
-			if reply.VoteGranted && reply.Term == w.currentTerm() {
+			if reply.VoteGranted && reply.Term == w.node.currentTerm() {
 				electionGrantedCount++
 			}
 		case e := <-w.eventProcessor.WaitUntilEmit():
@@ -136,8 +136,8 @@ func (w *CandidateStateWorker) doEraction() chan *message.RequestVoteReply {
 	replyCahn := make(chan *message.RequestVoteReply, peersLen)
 
 	requestVoteMessage := &message.RequestVote{
-		Term:        w.currentTerm(),
-		CandidateId: w.meta.Id,
+		Term:        w.node.currentTerm(),
+		CandidateId: w.node.meta.Id,
 	}
 
 	peerNodes := w.peerNodeManager.findAll()
@@ -145,7 +145,7 @@ func (w *CandidateStateWorker) doEraction() chan *message.RequestVoteReply {
 		w.workGroup.Add(1)
 		go func(peer *RaftPeerNode, message *message.RequestVote) {
 			defer w.workGroup.Done()
-			if w.currentState() != CandidateState {
+			if w.node.currentState() != CandidateState {
 				return
 			}
 
